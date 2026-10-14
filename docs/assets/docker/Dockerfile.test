@@ -1,0 +1,15 @@
+# Test image for running MXC sandboxes inside Docker. test.sh builds it from
+# the repository root after `bundle exec rake compile`.
+FROM ruby:4.0-slim
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends bubblewrap slirp4netns iptables util-linux curl ca-certificates python3 \
+ && rm -rf /var/lib/apt/lists/*
+RUN useradd -m app && mkdir -p /app/tmp /app/log /app/storage && chown app:app /app/tmp /app/log /app/storage
+WORKDIR /app
+COPY --chmod=755 docs/assets/docker/bwrap-wrapper.sh /usr/local/bin/bwrap
+COPY docs/assets/docker/deny-userns-filter.py /tmp/
+RUN mkdir -p /usr/local/lib/mxc && python3 -I /tmp/deny-userns-filter.py /usr/local/lib/mxc/deny-userns.bpf && rm /tmp/deny-userns-filter.py
+COPY lib /app/lib
+COPY docs/assets/docker/probe.rb docs/assets/docker/outer-sandbox.sh /app/docker/
+USER app
+CMD ["ruby", "/app/docker/probe.rb"]

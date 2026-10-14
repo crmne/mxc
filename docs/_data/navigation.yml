@@ -1,0 +1,6 @@
+- title: Guide
+  url: /getting-started/
+  collections:
+    - guides
+- title: RubyGems
+  url: https://rubygems.org/gems/mxc

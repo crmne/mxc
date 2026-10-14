@@ -1,0 +1,41 @@
+title: MXC for Ruby
+description: Run untrusted commands in OS sandboxes from Ruby, with filesystem, network, and timeout policies, through Microsoft's MXC.
+url: https://crmne.github.io
+baseurl: /mxc
+lang: en-US
+repository: crmne/mxc
+author:
+  name: Carmine Paolino
+  url: https://paolino.me
+
+theme: jekyll-vitepress-theme
+plugins:
+  - jekyll-vitepress-theme
+
+markdown: kramdown
+kramdown:
+  input: GFM
+permalink: pretty
+
+collections:
+  guides:
+    output: true
+    permalink: "/:name/"
+
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor
+
+jekyll_vitepress:
+  branding:
+    site_title: MXC for Ruby
+  syntax:
+    light_theme: github
+    dark_theme: github.dark
