@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    name: Lint (RuboCop, RDoc)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "4.0"
+          bundler-cache: true
+      - name: RuboCop
+        run: bundle exec rubocop
+      - name: Public API documentation
+        run: bundle exec rdoc --coverage-report lib
+
+  test:
+    name: Test (${{ matrix.os }}, Ruby ${{ matrix.ruby }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        ruby: ["3.2", "3.3", "3.4", "4.0"]
+        include:
+          - os: macos-latest
+            ruby: "4.0"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      - uses: dtolnay/rust-toolchain@stable
+      # After the toolchain, so the cache key follows the pinned rustc.
+      - uses: jdx/mr-boxington-action@v1
+        with:
+          cache-generation: test-v1
+      # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor,
+      # which Bubblewrap needs; the network tools let the network tests run.
+      - name: Sandbox dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends bubblewrap slirp4netns iptables util-linux
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          sudo chmod 0666 /dev/net/tun || true
+      - name: Compile
+        run: bundle exec rake compile
+      - name: Check the sandbox
+        run: bundle exec ruby -Ilib -rmxc -e 'a = MXC.availability; puts a.inspect; puts a.remediation if a.remediation; p MXC.backends'
+      - name: Tests
+        run: bundle exec rake test
+      - name: Proxy unit tests
+        run: bundle exec rake test:proxy

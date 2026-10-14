@@ -1,0 +1,160 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+env:
+  RUBY_VERSIONS: "3.2,3.3,3.4,4.0"
+
+jobs:
+  validate:
+    name: Validate release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      commit: ${{ steps.version.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "4.0"
+      - name: Check tag, version, branch and notes
+        id: version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(ruby -r ./lib/mxc/version -e 'puts MXC::VERSION')
+          if [ "$RELEASE_TAG" != "v$version" ]; then
+            echo "Release tag $RELEASE_TAG does not match gem version $version." >&2
+            exit 1
+          fi
+          crate=$(sed -n 's/^version = "\(.*\)"/\1/p' ext/mxc/Cargo.toml | head -1)
+          if [ "$crate" != "$version" ]; then
+            echo "ext/mxc/Cargo.toml version $crate does not match gem version $version." >&2
+            exit 1
+          fi
+          git merge-base --is-ancestor HEAD origin/main
+          prerelease=$(ruby -rrubygems/version -e 'puts Gem::Version.new(ARGV.fetch(0)).prerelease?' "$version")
+          if [ "$prerelease" != "$RELEASE_PRERELEASE" ]; then
+            echo "The GitHub prerelease setting does not match gem version $version." >&2
+            exit 1
+          fi
+          notes="packaging/release-notes/v$version.md"
+          if [ ! -s "$notes" ]; then
+            echo "$notes is missing or empty." >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Use the committed release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: gh release edit "$RELEASE_TAG" --notes-file "packaging/release-notes/v$VERSION.md"
+
+  test:
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+
+  native:
+    name: Native gem (${{ matrix.platform }})
+    needs: validate
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { platform: x86_64-linux, runner: ubuntu-latest }
+          - { platform: x86_64-linux-musl, runner: ubuntu-latest }
+          - { platform: aarch64-linux, runner: ubuntu-latest }
+          - { platform: aarch64-linux-musl, runner: ubuntu-latest }
+          - { platform: x86_64-darwin, runner: ubuntu-latest }
+          - { platform: arm64-darwin, runner: ubuntu-latest }
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "4.0"
+      - id: cross-gem
+        uses: oxidize-rb/actions/cross-gem@v1
+        with:
+          platform: ${{ matrix.platform }}
+          ruby-versions: ${{ env.RUBY_VERSIONS }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gem-${{ matrix.platform }}
+          path: ${{ steps.cross-gem.outputs.gem-path }}
+          if-no-files-found: error
+
+  source:
+    name: Source gem
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "4.0"
+      - run: gem build mxc.gemspec --output "mxc-${{ needs.validate.outputs.version }}.gem"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gem-ruby
+          path: mxc-${{ needs.validate.outputs.version }}.gem
+          if-no-files-found: error
+
+  publish:
+    name: Publish to RubyGems
+    needs: [validate, test, native, source]
+    runs-on: ubuntu-latest
+    environment: rubygems
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "4.0"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: gem-*
+          path: pkg
+          merge-multiple: true
+      - uses: rubygems/configure-rubygems-credentials@v1
+      - name: Push gems
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -l pkg
+          # Native gems first, so `gem install` never resolves to the source gem
+          # on a platform whose precompiled gem is about to appear.
+          for gem in $(ls pkg/*.gem | grep -v "mxc-${{ needs.validate.outputs.version }}.gem$") "pkg/mxc-${{ needs.validate.outputs.version }}.gem"; do
+            output=$(gem push "$gem" 2>&1) || {
+              echo "$output"
+              if echo "$output" | grep -qi "Repushing of gem versions is not allowed"; then
+                continue
+              fi
+              exit 1
+            }
+            echo "$output"
+          done
