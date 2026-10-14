@@ -12,6 +12,8 @@ CROSS_PLATFORMS = %w[
   aarch64-linux-musl
   x86_64-darwin
   arm64-darwin
+  x64-mingw-ucrt
+  aarch64-mingw-ucrt
 ].freeze
 
 GEMSPEC = Gem::Specification.load('mxc.gemspec')

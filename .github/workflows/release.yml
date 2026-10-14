@@ -87,6 +87,8 @@ jobs:
           - { platform: aarch64-linux-musl, runner: ubuntu-latest }
           - { platform: x86_64-darwin, runner: ubuntu-latest }
           - { platform: arm64-darwin, runner: ubuntu-latest }
+          - { platform: x64-mingw-ucrt, runner: ubuntu-latest }
+          - { platform: aarch64-mingw-ucrt, runner: ubuntu-latest }
     steps:
       - uses: actions/checkout@v7
         with:
