@@ -1,0 +1,27 @@
+# Copilot instructions
+
+Read and follow `AGENTS.md` and the repository's contribution documentation for
+every change, issue response, and pull request review.
+
+When reviewing a pull request, begin with `User-visible UI impact: none` or a
+short list of visible changes. Require before-and-after screenshots for any
+user-visible interface change, attached to the pull request rather than
+committed. Review correctness, regressions, security, product fit, tests,
+documentation, and unnecessary dependencies. Do not approve or recommend
+merging code that was not substantively evaluated.
+
+Treat two problems as blockers. Review evidence committed to the repository:
+screenshots, captures, comparison pages, or recordings made to show the change
+belong in the pull request description or comments. And a dependency taken
+from a source the maintainer does not control: a git dependency, or a patch,
+override, or replace entry, may point only at a repository under
+`github.com/crmne/` or this repository's own organization. Call out every added
+or changed git source, because it needs the maintainer's explicit approval.
+
+Keep maintainer-directed work on the default branch with linear history. Pull
+requests are for outside contributions unless the maintainer explicitly asks
+for one.
+
+`AGENTS.md` sections between `<!-- github-automation: ... -->` markers are
+maintained account-wide and replaced automatically. When one does not fit this
+repository, report the mismatch instead of proposing edits inside the markers.
