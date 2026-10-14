@@ -7,6 +7,75 @@ hero:
   name: MXC for Ruby
   text: Run untrusted commands in an OS sandbox
   tagline: Give code your application did not write only the files, hosts, and time you choose. One gem, built on Microsoft's MXC, on Linux, macOS, and Windows.
+  code_panel:
+    - title: Define a sandbox
+      file: app/sandboxes/skill_sandbox.rb
+      link: /policies/
+      code: |
+        ```ruby
+        class SkillSandbox < MXC::Sandbox
+          readable "app/skills"
+          writable "tmp/skills"
+          denied "app/skills/secrets"
+          directory "app/skills"
+          network allow: ["pypi.org"]
+          timeout 30
+        end
+        ```
+    - title: Run a command
+      file: app/jobs/build_skill_job.rb
+      link: /running-commands/
+      code: |
+        ```ruby
+        sandbox = SkillSandbox.new
+        result = sandbox.run("python3 build.py")
+
+        result.success? # => true
+        result.stdout   # => "Built report.pdf\n"
+        ```
+    - title: Allowed hosts
+      file: app/jobs/install_job.rb
+      link: /policies/#allowed-hosts
+      code: |
+        ```ruby
+        sandbox = SkillSandbox.new
+        result = sandbox.run("pip index versions flask")
+
+        result.blocked # => ["telemetry.example.com:443"]
+        ```
+    - title: Streaming
+      file: app/jobs/build_skill_job.rb
+      link: /running-commands/#streaming
+      code: |
+        ```ruby
+        sandbox = SkillSandbox.new
+
+        sandbox.run(["python3", "build.py"]) do |chunk|
+          print chunk.content
+        end
+        ```
+    - title: Interactive processes
+      file: app/models/console.rb
+      link: /running-commands/#interactive-processes
+      code: |
+        ```ruby
+        process = SkillSandbox.new.spawn("python3 -i -q")
+        process.write("print(6 * 7)\n")
+        process.close_write
+
+        process.each { |chunk| print chunk.content }
+        process.wait.success? # => true
+        ```
+    - title: Check the host
+      file: config/initializers/mxc.rb
+      link: /checking-the-host/
+      code: |
+        ```ruby
+        SkillSandbox.new.supported? # => false
+
+        SkillSandbox.new.availability.remediation
+        # => "Install slirp4netns, iptables ..."
+        ```
   actions:
     - theme: brand
       text: Get Started
@@ -49,10 +118,3 @@ features:
     link: /running-in-docker/
     link_text: Running in Docker
 ---
-
-```ruby
-result = MXC.run("python3 build.py", readable: "app/skills", writable: "tmp/out", timeout: 30)
-
-result.stdout
-result.success?
-```
