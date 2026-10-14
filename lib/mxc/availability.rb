@@ -17,11 +17,11 @@ module MXC
     attr_reader :remediation
 
     def self.probe(backend) # :nodoc:
-      result = Sandbox.new(backend:, timeout: 10).run('true')
+      result = Sandbox.new(backend:, timeout: 10).run('exit 0')
       return new(backend:, supported: true) if result.success?
 
       outcome = result.timed_out? ? 'timed out' : "exited with #{result.exit_code}"
-      new(backend:, supported: false, reason: "A sandboxed `true` #{outcome}: #{result.stderr.strip}")
+      new(backend:, supported: false, reason: "A sandboxed `exit 0` #{outcome}: #{result.stderr.strip}")
     rescue Error => e
       new(backend:, supported: false, reason: e.message, remediation: e.remediation)
     end

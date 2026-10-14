@@ -9,9 +9,14 @@ end
 module MXC
   module Native # :nodoc:
     UNSUPPORTED_CODES = %i[backend_unavailable unsupported_containment].freeze
+    BACKEND_NAMES = { processcontainer: :process_container }.freeze
     MISSING_BUBBLEWRAP = /bwrap\) is not installed/
     INSTALL_BUBBLEWRAP = 'Install Bubblewrap 0.5.0 or newer (Debian/Ubuntu: apt-get install bubblewrap; ' \
                          'Fedora: dnf install bubblewrap; Arch: pacman -S bubblewrap)'
+
+    def self.backend_attributes
+      backends.map { |attributes| attributes.merge(name: BACKEND_NAMES.fetch(attributes[:name], attributes[:name])) }
+    end
 
     def self.error(message, code: nil, remediation: nil, **)
       if message.match?(MISSING_BUBBLEWRAP)

@@ -27,6 +27,30 @@ MXC.run(["python3", "convert.py", params[:filename]])
 
 The command starts from a minimal environment (`PATH`, `TERM`, and little else). Add variables with [`env`]({% link _guides/policies.md %}#environment).
 
+### Windows
+
+On Windows, a String runs through `cmd.exe /d /s /c`, so `&`, `&&`, `|`, redirects, and `%VARIABLES%` work the way they do in a Command Prompt:
+
+```ruby
+MXC.run("python build.py && dir dist")
+```
+
+Quote a program's full path. `cmd.exe` looks up an unquoted path one folder at a time from the root of the drive, which the sandbox cannot read, and fails with "Access is denied":
+
+```ruby
+MXC.run('"C:\\Program Files\\Python313\\python.exe" build.py')
+```
+
+An Array starts the program directly, without `cmd.exe`, and quotes each element so the program receives it unchanged:
+
+```ruby
+MXC.run(["python", "convert.py", params[:filename]])
+```
+
+Windows runs `.bat` and `.cmd` files through `cmd.exe`, which splits arguments again, so an Array that starts one raises `ArgumentError`. Run batch files with a String and quote anything that comes from users yourself.
+
+Output uses Windows line endings (`"\r\n"`). Programs that need the Windows UI subsystem cannot start in the sandbox, because MXC blocks it: PowerShell, `tasklist`, and `whoami`, for example, exit with code `-1073741502` (`STATUS_DLL_INIT_FAILED`). Command-line tools such as Python, `curl.exe`, `findstr`, and the `cmd.exe` built-ins work.
+
 ## Results
 
 `run` waits for the command to finish and returns an `MXC::Result`:
@@ -46,7 +70,7 @@ result.backend    # => :bubblewrap
 
 A command that fails is still a result: check `success?` and read `stderr`. `run` raises `MXC::Error` only when the sandbox itself cannot start, as described in [Checking the Host]({% link _guides/checking-the-host.md %}).
 
-`stdout` and `stderr` use `Encoding.default_external`, like `Open3`. A command killed by a signal reports an exit code of `-1`.
+`stdout` and `stderr` use `Encoding.default_external`, like `Open3`. A command killed by a signal reports an exit code of `-1`. On Windows, `kill` and timeouts stop the command's whole process tree.
 
 ## Streaming
 

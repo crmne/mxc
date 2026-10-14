@@ -16,7 +16,7 @@ After reading this guide, you will know:
 MXC.supported? # => true
 ```
 
-`supported?` starts a real sandbox that runs `true` and caches the answer for the life of the process, once per backend. Installing Bubblewrap is not enough on its own: a container's seccomp profile or an AppArmor rule can still stop it, and only starting one tells you for sure.
+`supported?` starts a real sandbox that runs `exit 0` and caches the answer for the life of the process, once per backend. Installing Bubblewrap is not enough on its own: a container's seccomp profile or an AppArmor rule can still stop it, and only starting one tells you for sure.
 
 When the answer is `false`, `availability` explains:
 
@@ -61,6 +61,13 @@ backend.capabilities # => [:proxy_enforcement]
 backend.warnings     # => [] or MXC's reasons for missing capabilities
 ```
 
+On Windows, the backend is `:process_container`, and `tier` names the kind of container MXC uses on this machine: `"base-container"` where Windows provides one, or `"appcontainer-dacl"` otherwise.
+
+```ruby
+MXC.backends
+# => [#<MXC::Backend name=:process_container tier="appcontainer-dacl" capabilities=[]>]
+```
+
 A listed backend is installed, which is not the same as usable. Use `supported?` for that.
 
 ## Capabilities
@@ -74,7 +81,7 @@ MXC.supports?(:proxy_enforcement)
 ```
 
 * `:network` means `with_network(true)` works.
-* `:network_policy` means `with_network(allow: [...])` works: the network tools are installed and MXC can confine a sandbox to a proxy.
+* `:network_policy` means `with_network(allow: [...])` works: the network tools are installed and MXC can confine a sandbox to a proxy. It is always `false` on Windows.
 * Any other Symbol is checked against the capabilities MXC reports for the backend, such as `:proxy_enforcement`.
 
 ## Errors
@@ -105,6 +112,8 @@ end
 | Network tools are missing | Install `slirp4netns`, `iptables`, and util-linux. |
 | `/dev/net/tun` is unusable | `modprobe tun` on a host, `--device /dev/net/tun` in Docker. |
 | The backend does not exist here | Use `:auto`, or the backend for this operating system. |
+| A host allow-list on Windows | Use `network: false`, or `network: true` for unrestricted access. |
+| Denied paths on Windows without BaseContainer | Leave the paths out of `readable` and `writable` instead of denying them. |
 
 A plain `MXC::Error` usually means the request itself is wrong, such as a working directory the sandbox cannot see. Invalid settings, like an unknown backend, a non-positive timeout, or a malformed allow-list entry, raise `ArgumentError`.
 

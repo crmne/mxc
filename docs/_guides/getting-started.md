@@ -19,7 +19,7 @@ Add the gem with Bundler:
 bundle add mxc
 ```
 
-RubyGems picks a precompiled gem for Linux and macOS, so you do not need a Rust toolchain. On other platforms the gem compiles from source, which needs a recent stable Rust toolchain.
+RubyGems picks a precompiled gem for Linux, macOS, and Windows, so you do not need a Rust toolchain. On other platforms the gem compiles from source, which needs a recent stable Rust toolchain.
 
 ### Linux
 
@@ -42,6 +42,12 @@ sudo apt-get install slirp4netns iptables util-linux
 ### macOS
 
 Nothing to install. MXC uses Seatbelt, which ships with macOS.
+
+### Windows
+
+Nothing to install beyond Ruby from [RubyInstaller](https://rubyinstaller.org). MXC uses Windows' own process containers: a BaseContainer on Windows builds that provide one, and an AppContainer everywhere else. MXC supports Windows 11 24H2 (build 26100) and later, and the gem's tests also pass on Windows Server 2025.
+
+Commands on Windows run through `cmd.exe` rather than `sh`, and host allow-lists are not available. [Running Commands]({% link _guides/running-commands.md %}#windows) and [Policies]({% link _guides/policies.md %}#windows) cover the differences.
 
 ## Check the machine
 

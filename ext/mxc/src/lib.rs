@@ -7,9 +7,10 @@ use magnus::{
     function, method, prelude::*, Error, RArray, RHash, RModule, RString, Ruby, Symbol,
 };
 use mxc_sdk::v1::{
-    self, configs::SeatbeltConfig, Containment, ContainerRequest, FilesystemPolicy, MxcProcess,
-    NetworkAction, NetworkEgressPolicy, NetworkPolicy, NetworkRuntimeConfig, StreamCloser,
-    WaitResult,
+    self,
+    configs::{ProcessContainerConfig, SeatbeltConfig},
+    Containment, ContainerRequest, FilesystemPolicy, MxcProcess, NetworkAction,
+    NetworkEgressPolicy, NetworkPolicy, NetworkRuntimeConfig, StreamCloser, WaitResult,
 };
 
 mod proxy;
@@ -143,6 +144,9 @@ fn build_request(
             "auto" => Containment::Process,
             "bubblewrap" => Containment::Bubblewrap,
             "seatbelt" => Containment::Seatbelt(SeatbeltConfig::default()),
+            "process_container" => {
+                Containment::ProcessContainer(ProcessContainerConfig::default())
+            }
             other => return Err(arg_error(ruby, format!("unknown backend :{other}"))),
         };
     }

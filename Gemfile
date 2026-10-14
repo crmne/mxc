@@ -4,6 +4,7 @@ source 'https://rubygems.org'
 
 gemspec
 
+gem 'fiddle', platforms: :windows
 gem 'irb'
 gem 'minitest', '~> 5.25'
 gem 'overcommit'

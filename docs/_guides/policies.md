@@ -10,6 +10,7 @@ After reading this guide, you will know:
 * How to give a command no network, any network, or a list of allowed hosts.
 * What host allow-lists need from the machine, and where they stop protecting you.
 * How to set the environment, working directory, timeout, and backend.
+* How policies behave on Windows.
 
 Every policy setting has three forms that mean the same thing: a keyword for `MXC.run` and `MXC::Sandbox.new`, a chainable `with_` setter, and a class macro for `MXC::Sandbox` subclasses.
 
@@ -139,12 +140,36 @@ Without a timeout, the command runs until it exits. Set a default for every sand
 
 `backend` picks the sandbox technology:
 
-* `:auto`, the default, uses Bubblewrap on Linux and Seatbelt on macOS.
-* `:bubblewrap` and `:seatbelt` ask for one explicitly, and raise `MXC::UnsupportedError` where it does not exist.
+* `:auto`, the default, uses Bubblewrap on Linux, Seatbelt on macOS, and ProcessContainer on Windows.
+* `:bubblewrap`, `:seatbelt`, and `:process_container` ask for one explicitly, and raise `MXC::UnsupportedError` where it does not exist.
 
 ```ruby
 MXC.configure { |config| config.backend = :bubblewrap }
 ```
+
+## Windows
+
+The same settings work on Windows, enforced by Windows' own process containers. A few things differ.
+
+### Filesystem on Windows
+
+A new sandbox can read what Windows lets every app container read, such as `C:\Windows` and `C:\Program Files`, and nothing of your user profile or project. `readable`, `writable`, and `denied` grant and hide paths as on other platforms. Each command gets its own temporary folder, and `TEMP`, `TMP`, and `LOCALAPPDATA` point into it.
+
+On Windows builds without BaseContainer, MXC enforces paths in an AppContainer by adding entries to the access control lists of the paths you grant, and removes them when the command finishes. Your process needs permission to change those lists, and a large tree takes longer to grant. If your process crashes during a run, the entries stay until you remove them.
+
+The AppContainer does not enforce `denied` paths, so a sandbox with any raises `MXC::UnsupportedError` there instead of running without them. Leave those paths out of `readable` and `writable` instead. `MXC.supports?(:filesystem_denied_paths)` tells you whether this machine enforces them.
+
+### Network on Windows
+
+* `false`, the default, gives the command no network.
+* `true` lets it reach the internet. It cannot reach `localhost` or your private network.
+* `allow:` raises `MXC::UnsupportedError`. MXC can only confine a Windows sandbox to a proxy in your process by also accepting inbound connections to the sandbox, so the gem does not offer host allow-lists there. `MXC.supports?(:network_policy)` is `false`.
+
+### Environment and working directory on Windows
+
+Windows programs need a few system variables to start, so the environment keeps `SYSTEMROOT`, `WINDIR`, `SYSTEMDRIVE`, `COMSPEC`, `PATHEXT`, `PATH`, `LOCALAPPDATA`, `TEMP`, `TMP`, `PROCESSOR_ARCHITECTURE`, `NUMBER_OF_PROCESSORS`, and `OS` from your process. Your own variables replace them, ignoring case. Nothing else from your environment reaches the command.
+
+Without a `directory`, the command starts in `%SystemRoot%`.
 
 ## Reading a policy back
 

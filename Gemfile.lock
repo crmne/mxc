@@ -11,6 +11,7 @@ GEM
     childprocess (5.1.0)
       logger (~> 1.5)
     erb (6.0.7)
+    fiddle (1.1.8)
     iniparse (1.5.0)
     io-console (0.9.4)
     irb (1.18.0)
@@ -88,11 +89,14 @@ GEM
     unicode-emoji (4.3.0)
 
 PLATFORMS
+  aarch64-mingw-ucrt
   arm64-darwin
   ruby
+  x64-mingw-ucrt
   x86_64-linux
 
 DEPENDENCIES
+  fiddle
   irb
   minitest (~> 5.25)
   mxc!
@@ -110,6 +114,7 @@ CHECKSUMS
   bundler (4.0.21) sha256=7cbf5499b426076aa16c8d28a59e4c2c3aad5a438402abcd961f0119f29f1dd0
   childprocess (5.1.0) sha256=9a8d484be2fd4096a0e90a0cd3e449a05bc3aa33f8ac9e4d6dcef6ac1455b6ec
   erb (6.0.7) sha256=c5ca6dc25b0ef974a44dc8f59fe847577122483b1968a38dec305c60bf91ee92
+  fiddle (1.1.8) sha256=7fa8ee3627271497f3add5503acdbc3f40b32f610fc1cf49634f083ef3f32eee
   iniparse (1.5.0) sha256=36a165e98d8a250b7631c4a7f9afba32af78f089970cd6446a39771189c761f1
   io-console (0.9.4) sha256=a403304f32928ee85e56d457b4612ca43f2703b561a3258844992bd24085fbb1
   irb (1.18.0) sha256=de9454a0703a54704b9811a5ef31a60c86949fbf4013fcf244fabc7c775248e3

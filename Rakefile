@@ -33,8 +33,9 @@ RuboCop::RakeTask.new
 desc "Run the egress proxy's Rust unit tests"
 task 'test:proxy' do
   mkdir_p 'tmp'
-  sh 'rustc', '--edition', '2021', '--test', 'ext/mxc/src/proxy.rs', '-o', 'tmp/proxy_test'
-  sh 'tmp/proxy_test'
+  binary = "tmp/proxy_test#{RbConfig::CONFIG['EXEEXT']}"
+  sh 'rustc', '--edition', '2021', '--test', 'ext/mxc/src/proxy.rs', '-o', binary
+  sh binary
 end
 
 namespace :release do

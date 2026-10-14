@@ -112,11 +112,11 @@ module MXC
       sandbox = MXC.sandbox.with_readable('app').with_writable('tmp').with_denied('/secret')
                    .with_env('A' => '1').with_directory('app').with_timeout(1.5).with_backend(:bubblewrap)
 
-      _, request = capture_request(sandbox)
+      _, request = Preflight.stub(:windows?, false) { capture_request(sandbox) }
 
       assert_equal [File.expand_path('app')], request[:readonly]
       assert_equal [File.expand_path('tmp')], request[:readwrite]
-      assert_includes request[:denied], '/secret'
+      assert_includes request[:denied], File.expand_path('/secret')
       assert_equal({ 'A' => '1' }, request[:environment])
       assert_equal File.expand_path('app'), request[:working_directory]
       assert_equal 1500, request[:timeout_ms]
@@ -159,7 +159,7 @@ module MXC
     end
 
     def test_array_commands_are_escaped
-      line, = capture_request(MXC.sandbox, ['printf', '%s', 'a b; rm -rf /'])
+      line, = Preflight.stub(:windows?, false) { capture_request(MXC.sandbox, ['printf', '%s', 'a b; rm -rf /']) }
 
       assert_equal Shellwords.join(['printf', '%s', 'a b; rm -rf /']), line
     end
@@ -170,7 +170,7 @@ module MXC
       assert_instance_of Result, result
       assert_equal "hi\n", result.stdout
       assert_equal ['w'], result.warnings
-      assert_includes %i[bubblewrap seatbelt], result.backend
+      assert_includes %i[bubblewrap seatbelt process_container], result.backend
     end
 
     def test_run_checks_network_tools_before_starting_anything
@@ -194,6 +194,92 @@ module MXC
 
         refute_predicate availability, :supported?
         assert_equal 'install it', availability.remediation
+      end
+    end
+  end
+
+  class WindowsRequestTest < Minitest::Test
+    def on_windows(sandbox, command = 'exit 0', env: ENV.to_h, &)
+      Preflight.stub(:windows?, true) do
+        ENV.stub(:to_h, env) do
+          ENV.stub(:fetch, ->(name, *) { env[name] }) { capture_request(sandbox, command) }
+        end
+      end
+    end
+
+    def test_strings_run_through_cmd
+      line, = on_windows(MXC.sandbox, 'echo hi & exit 3')
+
+      assert_equal 'cmd.exe /d /s /c "echo hi & exit 3"', line
+    end
+
+    def test_arrays_are_quoted_for_command_line_to_argv
+      line, = on_windows(MXC.sandbox, ['C:\\Program Files\\tool.exe', 'a b', 'say "hi"', 'dir\\', '', 'plain'])
+
+      assert_equal '"C:\\Program Files\\tool.exe" "a b" "say \\"hi\\"" dir\\ "" plain', line
+    end
+
+    def test_arrays_refuse_batch_files
+      error = assert_raises(ArgumentError) { on_windows(MXC.sandbox, ['build.CMD', 'x & y']) }
+
+      assert_match 'cmd.exe', error.message
+    end
+
+    def test_paths_use_backslashes
+      _, request = on_windows(MXC.sandbox.with_readable('app').with_directory('app'))
+
+      assert_equal [File.expand_path('app').tr('/', '\\')], request[:readonly]
+      assert_equal File.expand_path('app').tr('/', '\\'), request[:working_directory]
+    end
+
+    def test_commands_start_in_the_system_root_by_default
+      _, request = on_windows(MXC.sandbox, env: { 'SystemRoot' => 'C:\\Windows' })
+
+      assert_equal 'C:\\Windows', request[:working_directory]
+    end
+
+    def test_the_environment_keeps_only_system_variables_under_the_sandboxs_own
+      host = { 'SystemRoot' => 'C:\\Windows', 'Path' => 'C:\\bin', 'LOCALAPPDATA' => 'C:\\L', 'OPENAI_API_KEY' => 'sk' }
+
+      _, request = on_windows(MXC.sandbox.with_env('PATH' => 'C:\\tools', 'LANG' => 'C'), env: host)
+
+      assert_equal({ 'SystemRoot' => 'C:\\Windows', 'LOCALAPPDATA' => 'C:\\L', 'PATH' => 'C:\\tools', 'LANG' => 'C' },
+                   request[:environment])
+    end
+
+    def test_auto_runs_on_process_container
+      result = Preflight.stub(:windows?, true) do
+        Native.stub(:run, ->(*) { outcome }) { MXC.sandbox.run('exit 0') }
+      end
+
+      assert_equal :process_container, result.backend
+    end
+
+    def test_denied_paths_need_a_backend_that_enforces_them
+      appcontainer = [{ name: :processcontainer, tier: 'appcontainer-dacl', capabilities: [], warnings: [] }]
+      base = [{ name: :processcontainer, tier: 'base-container', capabilities: [:filesystem_denied_paths],
+                warnings: [] }]
+
+      Preflight.stub(:windows?, true) do
+        Native.stub(:backends, appcontainer) do
+          error = Preflight.problem(network: false, denied: ['C:\\secret'])
+
+          assert_instance_of UnsupportedError, error
+          assert_match 'readable and writable', error.remediation
+          assert_nil Preflight.problem(network: false, denied: [])
+        end
+        Native.stub(:backends, base) { assert_nil Preflight.problem(network: false, denied: ['C:\\secret']) }
+      end
+    end
+
+    def test_allow_lists_are_unsupported
+      error = Preflight.stub(:windows?, true) { Preflight.problem(network: { allow: ['pypi.org'] }) }
+
+      assert_instance_of UnsupportedError, error
+      assert_match 'network: true', error.remediation
+      Preflight.stub(:windows?, true) do
+        assert_nil Preflight.problem(network: true)
+        assert_nil Preflight.problem(network: false)
       end
     end
   end

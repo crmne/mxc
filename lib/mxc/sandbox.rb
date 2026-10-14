@@ -25,9 +25,12 @@ module MXC
   #
   #   SkillSandbox.new.run("python3 app/skills/build.py")
   class Sandbox
-    BACKENDS = %i[auto bubblewrap seatbelt].freeze # :nodoc:
+    BACKENDS = %i[auto bubblewrap seatbelt process_container].freeze # :nodoc:
     OPTIONS = %i[readable writable denied network env directory timeout backend].freeze # :nodoc:
     HOST_RESOLVER_SOCKETS = %w[/run/systemd/resolve].freeze # :nodoc:
+    WINDOWS_ENV = %w[SYSTEMROOT WINDIR SYSTEMDRIVE COMSPEC PATHEXT PATH LOCALAPPDATA TEMP TMP
+                     PROCESSOR_ARCHITECTURE NUMBER_OF_PROCESSORS OS].freeze # :nodoc:
+    BATCH_FILE = /\.(bat|cmd)\z/i # :nodoc:
     MAX_TIMEOUT_MS = (2**32) - 1 # :nodoc:
     DEFAULTS = {
       readable: [], writable: [], denied: [], env: {}, network: false, directory: nil, timeout: nil, backend: nil
@@ -122,7 +125,7 @@ module MXC
     # Returns the network access: +false+, +true+, or <tt>{ allow: [...] }</tt> for an allow-list.
     def network = @settings[:network]
 
-    # Returns the working directory, or nil for the sandbox's root.
+    # Returns the working directory, or nil for the default.
     def directory = @settings[:directory]
 
     # Returns the timeout in seconds, falling back to MXC.config.timeout.
@@ -168,7 +171,8 @@ module MXC
     end
 
     # Adds environment variables for the command. The sandbox starts from a minimal
-    # environment, not the parent's.
+    # environment, not the parent's. On Windows, that environment keeps the system
+    # variables programs need to start, such as +SYSTEMROOT+ and +PATH+.
     #
     #   sandbox.with_env("LANG" => "C.UTF-8")
     def with_env(variables)
@@ -178,6 +182,7 @@ module MXC
     end
 
     # Sets the directory the command starts in. The sandbox must be able to read it.
+    # Without one, the command starts in <tt>/</tt>, or <tt>%SystemRoot%</tt> on Windows.
     def with_directory(path)
       @settings[:directory] = path && File.path(path)
       self
@@ -190,15 +195,17 @@ module MXC
       self
     end
 
-    # Sets the backend: <tt>:auto</tt> (Bubblewrap on Linux, Seatbelt on macOS),
-    # <tt>:bubblewrap</tt>, or <tt>:seatbelt</tt>.
+    # Sets the backend: <tt>:auto</tt> (Bubblewrap on Linux, Seatbelt on macOS,
+    # ProcessContainer on Windows), <tt>:bubblewrap</tt>, <tt>:seatbelt</tt>, or
+    # <tt>:process_container</tt>.
     def with_backend(name)
       @settings[:backend] = name && self.class.backend_name(name)
       self
     end
 
     # Runs +command+ and returns its Result once it finishes. A String runs through
-    # <tt>sh -c</tt>; an Array is escaped into one command first.
+    # the platform shell: <tt>sh -c</tt>, or <tt>cmd.exe /c</tt> on Windows. An Array
+    # is a program and its arguments, each of which reaches the program unchanged.
     #
     # With a block, yields each Chunk of output as it arrives.
     #
@@ -223,7 +230,7 @@ module MXC
     # Returns the Availability of this sandbox on this host, with the reason and
     # remediation when it cannot run.
     def availability
-      problem = Preflight.problem(network:)
+      problem = Preflight.problem(network:, denied:)
       return MXC.availability(backend:) unless problem
 
       Availability.new(backend:, supported: false, reason: problem.message, remediation: problem.remediation)
@@ -269,23 +276,38 @@ module MXC
     end
 
     def command_line(command)
+      return command_line_for_windows(command) if Preflight.windows?
+
       command.is_a?(Array) ? Shellwords.join(command.map(&:to_s)) : command.to_s
+    end
+
+    def command_line_for_windows(command)
+      return %(cmd.exe /d /s /c "#{command}") unless command.is_a?(Array)
+
+      program, = command
+      if program.to_s.match?(BATCH_FILE)
+        raise ArgumentError, 'Windows runs batch files through cmd.exe, which does not keep arguments apart. ' \
+                             'Run them with a String command and quote untrusted input yourself'
+      end
+
+      command.map { |argument| WindowsArguments.quote(argument.to_s) }.join(' ')
     end
 
     def resolved_backend
       return backend unless backend == :auto
+      return :process_container if Preflight.windows?
 
       Preflight.linux? ? :bubblewrap : :seatbelt
     end
 
     def request
-      Preflight.check!(network:)
+      Preflight.check!(network:, denied:)
       {
         readonly: expand(readable),
         readwrite: expand(writable),
         denied: expand(denied) | hidden_resolver_sockets,
-        environment: env,
-        working_directory: directory && File.expand_path(directory),
+        environment:,
+        working_directory:,
         timeout_ms: timeout && [(timeout.to_f * 1000).ceil, MAX_TIMEOUT_MS].min,
         backend:,
         network: network == true,
@@ -294,7 +316,24 @@ module MXC
     end
 
     def expand(paths)
-      paths.map { |path| File.expand_path(path) }
+      paths.map { |path| native_path(File.expand_path(path)) }
+    end
+
+    def native_path(path)
+      Preflight.windows? ? path.tr('/', '\\') : path
+    end
+
+    def working_directory
+      return native_path(File.expand_path(directory)) if directory
+
+      ENV.fetch('SystemRoot', nil) if Preflight.windows?
+    end
+
+    def environment
+      return env unless Preflight.windows?
+
+      system = ENV.to_h.select { |name, _| WINDOWS_ENV.include?(name.upcase) }
+      system.reject { |name, _| env.keys.any? { |own| own.casecmp?(name) } }.merge(env)
     end
 
     def hidden_resolver_sockets

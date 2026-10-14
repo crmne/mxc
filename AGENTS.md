@@ -4,7 +4,7 @@ How the `mxc` gem is built. For coding agents first, humans welcome. Read [CONTR
 
 ## What this is
 
-`mxc` is an unofficial Ruby binding to [Microsoft's MXC](https://github.com/microsoft/mxc), a Rust library that runs commands in operating system sandboxes: Bubblewrap on Linux, Seatbelt on macOS. The gem compiles the `mxc-sdk` crate into a native extension with [magnus](https://github.com/matsadler/magnus) and [rb-sys](https://github.com/oxidize-rb/rb-sys), and wraps it in a small Ruby API: `MXC.run`, `MXC.spawn`, `MXC::Sandbox`, and the host checks `MXC.supported?`, `MXC.availability`, `MXC.backends`, and `MXC.supports?`.
+`mxc` is an unofficial Ruby binding to [Microsoft's MXC](https://github.com/microsoft/mxc), a Rust library that runs commands in operating system sandboxes: Bubblewrap on Linux, Seatbelt on macOS, ProcessContainer on Windows. The gem compiles the `mxc-sdk` crate into a native extension with [magnus](https://github.com/matsadler/magnus) and [rb-sys](https://github.com/oxidize-rb/rb-sys), and wraps it in a small Ruby API: `MXC.run`, `MXC.spawn`, `MXC::Sandbox`, and the host checks `MXC.supported?`, `MXC.availability`, `MXC.backends`, and `MXC.supports?`.
 
 Plain Ruby (>= 3.2) on top, Rust underneath, no runtime dependencies besides `rb_sys`.
 
@@ -13,7 +13,7 @@ Plain Ruby (>= 3.2) on top, Rust underneath, no runtime dependencies besides `rb
 | Path | Responsibility |
 | --- | --- |
 | `lib/mxc.rb` | The `MXC` module: entry points, configuration, host checks |
-| `lib/mxc/*.rb` | Public objects (`Sandbox`, `Process`, `Result`, `Chunk`, `Backend`, `Availability`, `Configuration`, errors) and internal helpers marked `:nodoc:` (`Native`, `Preflight`, `StartupFailure`) |
+| `lib/mxc/*.rb` | Public objects (`Sandbox`, `Process`, `Result`, `Chunk`, `Backend`, `Availability`, `Configuration`, errors) and internal helpers marked `:nodoc:` (`Native`, `Preflight`, `StartupFailure`, `WindowsArguments`) |
 | `ext/mxc/src/lib.rs` | The `MXC::Native` bridge: builds MXC requests, runs and spawns, maps MXC errors to Ruby |
 | `ext/mxc/src/proxy.rs` | The allow-list HTTP proxy behind `with_network(allow: [...])`, with its own Rust unit tests |
 | `test/` | Minitest. Tests that start sandboxes skip when `MXC.supported?` is false |
@@ -71,6 +71,8 @@ overcommit --install    # pre-commit hooks: RuboCop, tests
 | `cd docs && bundle exec jekyll serve` | Docs preview |
 
 Network tests need `slirp4netns`, `iptables`, util-linux, and `/dev/net/tun`. Where the host lacks them, run the suite inside the Docker test image with the seccomp profile, as `docs/assets/docker/test.sh` does.
+
+On Windows, build with RubyInstaller's DevKit. rb-sys generates its bindings with libclang, so install MSYS2's clang (`ridk exec pacman -S mingw-w64-ucrt-x86_64-clang`) and set `LIBCLANG_PATH` to its `bin` directory; Visual Studio's libclang cannot read MinGW's headers. `ext/mxc/build.rs` and `extconf.rb` handle the rest of the MinGW differences, and CI's Windows jobs show the full setup.
 
 ## Code style
 

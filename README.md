@@ -30,13 +30,13 @@ It is an unofficial Ruby binding to [Microsoft's MXC](https://github.com/microso
 bundle add mxc
 ```
 
-Precompiled gems cover Linux (x86_64 and ARM64, glibc and musl) and macOS (Intel and Apple Silicon). On Linux, install Bubblewrap:
+Precompiled gems cover Linux (x86_64 and ARM64, glibc and musl), macOS (Intel and Apple Silicon), and Windows (x64 and ARM64). On Linux, install Bubblewrap:
 
 ```sh
 sudo apt-get install bubblewrap
 ```
 
-Commands that use the network also need `slirp4netns`, `iptables`, util-linux, and `/dev/net/tun`. macOS needs nothing extra.
+Commands that use the network also need `slirp4netns`, `iptables`, util-linux, and `/dev/net/tun`. macOS and Windows need nothing extra.
 
 ## Usage
 
@@ -105,8 +105,10 @@ MXC.backends                   # => [#<MXC::Backend name=:bubblewrap ...>]
 | Platform | Backend | 0.1.0 |
 | --- | --- | --- |
 | Linux | Bubblewrap | Supported and tested |
-| macOS | Seatbelt | Supported, tested in CI |
-| Windows | | Not available: MXC's Windows backends do not build with the MinGW toolchain Ruby uses |
+| macOS | Seatbelt | Supported and tested |
+| Windows 11 24H2 and later | ProcessContainer | Supported and tested, without host allow-lists |
+
+On Windows, String commands run through `cmd.exe` instead of `sh`. See [Running Commands](https://crmne.github.io/mxc/running-commands/#windows) and [Policies](https://crmne.github.io/mxc/policies/#windows) for what else differs.
 
 Docker blocks the namespaces Bubblewrap needs by default. [Running in Docker](https://crmne.github.io/mxc/running-in-docker/) shows the smallest set of changes that makes it work, with a seccomp profile and a Kamal configuration for a job role.
 

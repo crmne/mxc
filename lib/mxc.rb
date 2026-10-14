@@ -11,6 +11,7 @@ require 'mxc/result'
 require 'mxc/backend'
 require 'mxc/availability'
 require 'mxc/process'
+require 'mxc/windows_arguments'
 require 'mxc/sandbox'
 
 # Runs commands in sandboxes through Microsoft's MXC.
@@ -74,7 +75,7 @@ module MXC
 
     # Returns the sandbox backends MXC finds on this host, as Backend objects.
     def backends
-      Native.backends.map { |attributes| Backend.new(**attributes) }
+      Native.backend_attributes.map { |attributes| Backend.new(**attributes) }
     end
 
     # Returns true when this host supports +capability+ with the configured backend.

@@ -39,7 +39,8 @@ module MXC
       }) do
         assert_predicate Availability.probe(:auto), :supported?
       end
-      assert_equal ['true'], commands
+      assert_equal 1, commands.size
+      assert_match 'exit 0', commands.first
     end
 
     def test_a_failed_sandbox_start_is_unsupported_with_a_remediation
@@ -98,6 +99,12 @@ module MXC
       end
     end
 
+    def test_backend_names_follow_ruby_naming
+      Native.stub(:backends, [{ name: :processcontainer, tier: 'base-container', capabilities: [], warnings: [] }]) do
+        assert_equal [:process_container], MXC.backends.map(&:name)
+      end
+    end
+
     def test_real_backends_report_symbols
       MXC.backends.each do |backend|
         assert_kind_of Symbol, backend.name
@@ -107,7 +114,7 @@ module MXC
 
     def test_the_real_probe_matches_a_real_run
       ran = begin
-        MXC.run('true').success?
+        MXC.run('exit 0').success?
       rescue Error
         false
       end

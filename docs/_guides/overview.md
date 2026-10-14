@@ -22,10 +22,10 @@ The gem is an unofficial Ruby binding to [Microsoft's MXC](https://github.com/mi
 | Platform | Backend | Status in 0.1.0 |
 | --- | --- | --- |
 | Linux | [Bubblewrap](https://github.com/containers/bubblewrap) | Supported and tested |
-| macOS | Seatbelt (`sandbox-exec`) | Built and tested in CI |
-| Windows | | Not available yet |
+| macOS | Seatbelt (`sandbox-exec`) | Supported and tested |
+| Windows | ProcessContainer (BaseContainer or AppContainer) | Supported and tested, without host allow-lists |
 
-The gem compiles MXC into a native extension, so you install one gem and no separate service. Precompiled gems cover Linux (glibc and musl, x86_64 and ARM64) and macOS (Intel and Apple Silicon).
+The gem compiles MXC into a native extension, so you install one gem and no separate service. Precompiled gems cover Linux (glibc and musl, x86_64 and ARM64), macOS (Intel and Apple Silicon), and Windows (x64 and ARM64).
 
 This project is not affiliated with or endorsed by Microsoft.
 {: .note }

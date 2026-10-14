@@ -6,6 +6,7 @@ module MXC
   class RunTest < Minitest::Test
     def setup
       super
+      skip 'these commands need a POSIX shell; WindowsRunTest covers Windows' if Preflight.windows?
       skip_unless_supported
       @dir = Dir.mktmpdir('mxc-test')
       @readable = File.join(@dir, 'readable')

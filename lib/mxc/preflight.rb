@@ -8,15 +8,20 @@ module MXC
               '(Debian/Ubuntu: apt-get install slirp4netns iptables util-linux; ' \
               'Fedora: dnf install slirp4netns iptables-nft util-linux; ' \
               'Arch: pacman -S slirp4netns iptables util-linux)'
+    WINDOWS_ALLOW_LIST = 'Use network: false, or network: true for unrestricted access. On Windows, MXC confines ' \
+                         'a sandbox to a proxy only by also accepting inbound connections to it'
+    WINDOWS_DENIED = 'Leave the paths out of readable and writable instead, or run on a Windows build where ' \
+                     'MXC.supports?(:filesystem_denied_paths) is true'
 
     module_function
 
-    def check!(network:)
-      error = problem(network:)
+    def check!(network:, denied: [])
+      error = problem(network:, denied:)
       raise error if error
     end
 
-    def problem(network:, path: ENV.fetch('PATH', ''), tun: TUN)
+    def problem(network:, denied: [], path: ENV.fetch('PATH', ''), tun: TUN)
+      return windows_problem(network, denied) if windows?
       return unless network && linux?
 
       missing = NETWORK_TOOLS.reject { |tool| executable?(tool, path) }
@@ -32,6 +37,24 @@ module MXC
 
     def linux?
       RUBY_PLATFORM.include?('linux')
+    end
+
+    def windows?
+      Gem.win_platform?
+    end
+
+    def windows_problem(network, denied)
+      if network.is_a?(Hash)
+        UnsupportedError.new('Host allow-lists are not supported on Windows',
+                             code: :backend_unavailable, remediation: WINDOWS_ALLOW_LIST)
+      elsif denied.any? && !denied_paths_enforced?
+        UnsupportedError.new("MXC's AppContainer sandbox on this Windows build does not enforce denied paths",
+                             code: :backend_unavailable, remediation: WINDOWS_DENIED)
+      end
+    end
+
+    def denied_paths_enforced?
+      MXC.backends.any? { |backend| backend.supports?(:filesystem_denied_paths) }
     end
 
     def executable?(tool, path)

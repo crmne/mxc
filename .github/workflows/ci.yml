@@ -46,6 +46,12 @@ jobs:
         include:
           - os: macos-latest
             ruby: "4.0"
+          - os: windows-latest
+            ruby: "3.4"
+          - os: windows-latest
+            ruby: "4.0"
+          - os: windows-11-arm
+            ruby: "4.0"
     steps:
       - uses: actions/checkout@v7
       - uses: ruby/setup-ruby@v1
@@ -55,10 +61,20 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       # After the toolchain, so the cache key follows the pinned rustc.
       - uses: jdx/mr-boxington-action@v1
+        if: runner.os != 'Windows'
         with:
           cache-generation: test-v1
-      # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor,
-      # which Bubblewrap needs; the network tools let the network tests run.
+      # rb-sys generates its Ruby bindings with libclang. The runner's Visual
+      # Studio ships an older libclang that cannot read MinGW's headers, so
+      # point bindgen at the MSYS2 clang that matches them, with the MinGW
+      # triple: clang does not know Rust's aarch64-pc-windows-gnullvm.
+      - name: MinGW clang
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          pacman -S --noconfirm --needed "$MINGW_PACKAGE_PREFIX-clang"
+          echo "LIBCLANG_PATH=$(cygpath -w "$MINGW_PREFIX/bin")" >> "$GITHUB_ENV"
+          echo "BINDGEN_EXTRA_CLANG_ARGS=--target=$MINGW_CHOST" >> "$GITHUB_ENV"
       - name: Sandbox dependencies
         if: runner.os == 'Linux'
         run: |
@@ -69,6 +85,7 @@ jobs:
       - name: Compile
         run: bundle exec rake compile
       - name: Check the sandbox
+        shell: bash
         run: bundle exec ruby -Ilib -rmxc -e 'a = MXC.availability; puts a.inspect; puts a.remediation if a.remediation; p MXC.backends'
       - name: Tests
         run: bundle exec rake test

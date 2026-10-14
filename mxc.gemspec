@@ -9,8 +9,8 @@ Gem::Specification.new do |spec|
   spec.email = ['carmine@paolino.me']
 
   spec.summary = "Run untrusted commands in OS sandboxes from Ruby, through Microsoft's MXC."
-  spec.description = "An unofficial Ruby binding to Microsoft's MXC. Run commands in Bubblewrap or Seatbelt " \
-                     'sandboxes with filesystem, network, environment and timeout policies.'
+  spec.description = "An unofficial Ruby binding to Microsoft's MXC. Run commands in Bubblewrap, Seatbelt or " \
+                     'Windows ProcessContainer sandboxes with filesystem, network, environment and timeout policies.'
   spec.homepage = 'https://crmne.github.io/mxc/'
   spec.license = 'MIT'
   spec.required_ruby_version = '>= 3.2.0'
