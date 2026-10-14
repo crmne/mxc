@@ -26,7 +26,7 @@ Setters return the sandbox, so they chain. Passing `nil` resets a setting to its
 
 ## Filesystem
 
-A new sandbox sees the system's programs and libraries (`/usr`, `/etc`, and similar) read-only, an empty private `/tmp`, and nothing else from your machine: no home directory, no project, no other users' files.
+A new sandbox sees the system's programs and libraries (`/usr`, `/etc`, and similar) read-only, and nothing else from your machine: no home directory, no project, no other users' files. On Linux it also gets an empty private `/tmp`. On macOS there is no writable temporary directory, so give the command a writable one and point `TMPDIR` at it with `env`.
 
 Grant access with three settings. Each takes Strings or Pathnames, accepts several paths at once, and adds to what is already there:
 
@@ -122,7 +122,7 @@ Never pass secrets the command does not need. Anything in its environment, it ca
 MXC.sandbox.with_readable("app/skills").with_directory("app/skills").run("python3 build.py")
 ```
 
-A directory the sandbox cannot see raises `MXC::Error` with a remediation that says so.
+On Linux, a directory the sandbox cannot see raises `MXC::Error` with a remediation that says so. On macOS, the command starts there but cannot read anything in it.
 
 ## Timeout
 

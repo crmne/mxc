@@ -40,7 +40,7 @@ Commands that use the network also need `slirp4netns`, `iptables`, util-linux, a
 
 ## Usage
 
-Run a command. It sees the system's programs read-only, a private `/tmp`, and no network:
+Run a command. It sees the system's programs read-only, nothing of your home directory or project, and no network:
 
 ```ruby
 MXC.run("python3 -c 'print(6 * 7)'").stdout # => "42\n"

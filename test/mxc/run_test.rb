@@ -64,9 +64,20 @@ module MXC
     end
 
     def test_a_directory_outside_the_sandbox_raises
+      skip 'Seatbelt starts commands in directories they cannot read' unless Preflight.linux?
+
       error = assert_raises(Error) { MXC.run('pwd', directory: @readable) }
 
       assert_match 'readable', error.remediation
+    end
+
+    def test_a_directory_outside_the_sandbox_stays_unreadable
+      skip 'Bubblewrap refuses to start in a directory it cannot see' if Preflight.linux?
+
+      result = MXC.run('pwd; cat input.txt', directory: @readable)
+
+      assert_equal "#{@readable}\n", result.stdout
+      refute_predicate result, :success?
     end
 
     def test_streams_output_and_returns_the_result

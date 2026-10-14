@@ -69,7 +69,7 @@ result.stdout    # => "42\n"
 result.success?  # => true
 ```
 
-By default the command sees the system's programs and libraries read-only, a private `/tmp`, and nothing of your home directory or project. It has no network. Grant more with keywords:
+By default the command sees the system's programs and libraries read-only, a private `/tmp` on Linux, and nothing of your home directory or project. It has no network. Grant more with keywords:
 
 ```ruby
 result = MXC.run(
