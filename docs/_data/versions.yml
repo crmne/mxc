@@ -1,0 +1,7 @@
+current: auto
+items:
+  - title: Latest
+    url: /
+  - title: Releases
+    url: https://github.com/crmne/mxc/releases
+    external: true

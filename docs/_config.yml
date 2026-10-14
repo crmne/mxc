@@ -34,8 +34,83 @@ exclude:
   - vendor
 
 jekyll_vitepress:
+  version:
+    file: ../lib/mxc/version.rb
+  seo:
+    page_type: TechArticle
+    publisher:
+      type: Person
+      name: Carmine Paolino
+      url: https://paolino.me
+      same_as:
+        - https://github.com/crmne/mxc
+        - https://rubygems.org/gems/mxc
+  llms:
+    title: MXC for Ruby
+    description: >-
+      Documentation for the mxc gem, which runs untrusted commands from Ruby
+      in an OS sandbox through Microsoft's MXC.
+    full: true
+    details: >-
+      Start with getting started, then running commands, policies, checking
+      the host, and running in Docker. Source is on
+      [GitHub](https://github.com/crmne/mxc), and the generated
+      [API reference](https://crmne.github.io/mxc/api/) documents the Ruby API.
   branding:
     site_title: MXC for Ruby
+  tokens:
+    light:
+      "--vp-c-brand-1": "#0f766e"
+      "--vp-c-brand-2": "#0d9488"
+      "--vp-c-brand-3": "#115e59"
+      "--vp-c-brand-soft": "rgba(13, 148, 136, 0.14)"
+      "--vp-home-hero-name-color": "transparent"
+      "--vp-home-hero-name-background": "-webkit-linear-gradient(120deg, #0d9488 30%, #2563eb)"
+      "--vp-home-hero-image-background-image": "linear-gradient(-45deg, #14b8a6 50%, #3b82f6 50%)"
+    dark:
+      "--vp-c-brand-1": "#2dd4bf"
+      "--vp-c-brand-2": "#5eead4"
+      "--vp-c-brand-3": "#14b8a6"
+      "--vp-c-brand-soft": "rgba(45, 212, 191, 0.16)"
+      "--vp-home-hero-name-color": "transparent"
+      "--vp-home-hero-name-background": "-webkit-linear-gradient(120deg, #2dd4bf 30%, #60a5fa)"
+      "--vp-home-hero-image-background-image": "linear-gradient(-45deg, #14b8a6 50%, #3b82f6 50%)"
   syntax:
     light_theme: github
     dark_theme: github.dark
+  footer:
+    enabled: true
+    show_on_docs: false
+    message: >-
+      Brought to you by <a href="https://paolino.me" target="_blank" rel="noreferrer">Carmine Paolino</a>, maker of
+    copyright: >-
+      <span class="footer-brand-links"><a href="https://chatwithwork.com" class="footer-chatwithwork-link" target="_blank" rel="noreferrer"><img class="footer-chatwithwork-logo theme-image light" src="https://chatwithwork.com/logotype.svg" alt="Chat with Work"><img class="footer-chatwithwork-logo theme-image dark" src="https://chatwithwork.com/logotype-dark.svg" alt="Chat with Work"></a><a href="https://rubyllm.com" class="footer-rubyllm-link" target="_blank" rel="noreferrer"><img class="footer-rubyllm-logo theme-image light" src="https://rubyllm.com/assets/images/logotype.svg" alt="RubyLLM"><img class="footer-rubyllm-logo theme-image dark" src="https://rubyllm.com/assets/images/logotype_dark.svg" alt="RubyLLM"></a><a href="https://paolino.me/projects" target="_blank" rel="noreferrer" aria-label="More projects by Carmine Paolino">and more</a></span><br><span class="footer-built-with">Docs built with <a href="https://jekyll-vitepress.dev" target="_blank" rel="noreferrer">Jekyll VitePress</a>.</span>
+  doc_footer:
+    enabled: true
+    previous_label: Previous page
+    next_label: Next page
+  last_updated:
+    enabled: true
+    text: Last updated
+    format: "%-d %b %Y"
+  edit_link:
+    enabled: true
+    pattern: "https://github.com/crmne/mxc/edit/main/docs/:path"
+    text: Edit this page on GitHub
+  github_star:
+    enabled: true
+    repository: crmne/mxc
+    text: Star
+    show_count: true
+  github_sponsor:
+    enabled: true
+    user: crmne
+    text: Sponsor
+  labels:
+    outline: On this page
+    sidebar_menu: Menu
+    return_to_top: Return to top
+    skip_to_content: Skip to content
+    appearance_menu: Appearance
+    switch_to_dark: Switch to dark theme
+    switch_to_light: Switch to light theme

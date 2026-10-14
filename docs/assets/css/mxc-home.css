@@ -189,3 +189,8 @@
   padding-left: 12px;
   white-space: nowrap;
 }
+
+.VPFooter .footer-built-with {
+  display: block;
+  margin-top: 12px;
+}

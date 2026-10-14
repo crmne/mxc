@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "docs/**"
+      - "lib/**"
+      - ".rdoc_options"
       - ".github/workflows/docs.yml"
   release:
     types: [published]
@@ -36,6 +38,12 @@ jobs:
         env:
           JEKYLL_ENV: production
         run: bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}"
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "4.0"
+          bundler-cache: true
+      - name: Build API docs into /api/
+        run: docs/bin/build-api.sh docs/_site/api
       - uses: actions/upload-pages-artifact@v4
         with:
           path: docs/_site
