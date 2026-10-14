@@ -573,8 +573,7 @@ dependencies = [
 [[package]]
 name = "mxc-sdk"
 version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4866ca589a68edc8e931eba58eed9253ad1ce670e974aedc4830a1d94bca6cd"
+source = "git+https://github.com/crmne/microsoft-mxc?rev=21dad14168287bfdbe304266ab30bdbf78b44c32#21dad14168287bfdbe304266ab30bdbf78b44c32"
 dependencies = [
  "anyhow",
  "base64",

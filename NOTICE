@@ -5,7 +5,8 @@ This gem is an unofficial Ruby binding to MXC. It is not affiliated with or
 endorsed by Microsoft.
 
 The native extension compiles and links the mxc-sdk crate
-(https://github.com/microsoft/mxc, https://crates.io/crates/mxc-sdk),
+(https://github.com/microsoft/mxc, https://crates.io/crates/mxc-sdk), from
+a fork at https://github.com/crmne/microsoft-mxc that adds resource limits,
 which is distributed under the MIT License:
 
 MIT License

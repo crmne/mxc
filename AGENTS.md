@@ -46,7 +46,7 @@ Keep 0.x minimal: no PTY, no long-lived container lifecycle, no UI policy until 
 
 ## Ground rules
 
-- `mxc-sdk` is pinned to an exact version (`=1.0.0`). Upgrading it is its own commit: re-run the full test suite, `docs/assets/docker/test.sh`, and recheck `StartupFailure`'s patterns and `bwrap-wrapper.sh`, which depend on MXC's Bubblewrap arguments.
+- `mxc-sdk` comes from [crmne/microsoft-mxc](https://github.com/crmne/microsoft-mxc), a fork of MXC 1.0.0 that adds resource limits until MXC ships them (microsoft/mxc#1498), pinned to an exact commit (`rev`). Moving the pin, or back to a crates.io release, is its own commit: re-run the full test suite, `docs/assets/docker/test.sh`, and recheck `StartupFailure`'s patterns and `bwrap-wrapper.sh`, which depend on MXC's Bubblewrap arguments.
 - Keep diffs small and focused. No drive-by refactors.
 - Plain commit messages: a subject of at most 60 characters, a body wrapped at 72 that says why. No "Generated with" footers, no Co-Authored-By tags.
 - Never push and never post to GitHub on a maintainer's behalf. Commit locally and leave the rest to the maintainer.

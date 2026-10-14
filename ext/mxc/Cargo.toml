@@ -11,7 +11,9 @@ crate-type = ["cdylib"]
 
 [dependencies]
 magnus = "0.8.2"
-mxc-sdk = "=1.0.0"
+# A fork of mxc-sdk 1.0.0 that adds resource limits (microsoft/mxc#1498),
+# until MXC releases them.
+mxc-sdk = { git = "https://github.com/crmne/microsoft-mxc", rev = "21dad14168287bfdbe304266ab30bdbf78b44c32" }
 rb-sys = { version = "0.9.130", features = ["stable-api-compiled-fallback"] }
 
 [build-dependencies]
