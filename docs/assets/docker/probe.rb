@@ -45,6 +45,12 @@ check("python subprocess+multiprocessing") do
             "print(subprocess.run(['echo','sub'],capture_output=True,text=True).stdout.strip(), " \
             "m.Pool(2).map(abs,[-1,-2]))\"")
 end
+check("limits") do
+  spin = MXC.run("while :; do :; done", limits: { cpu_time: 1 }, timeout: 20)
+  allocate = MXC.run("python3 -c 'bytearray(512 * 1024 * 1024)'", limits: { memory: 256 * 1024 * 1024 }, timeout: 20)
+  "cpu_time=#{spin.cpu_time&.round(1)} limit=#{spin.limit_exceeded.inspect} " \
+    "allocation_over_memory_limit=#{allocate.success? ? 'ALLOWED' : 'failed'}"
+end
 exit if ARGV.include?("--quick")
 
 check("inner max_user_namespaces") { sandboxed("cat /proc/sys/user/max_user_namespaces") }

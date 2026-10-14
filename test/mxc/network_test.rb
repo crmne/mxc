@@ -29,6 +29,18 @@ module MXC
       assert_empty result.blocked
     end
 
+    def test_allow_lists_hold_under_resource_limits
+      allowed = MXC.run(curl("http://127.0.0.1:#{@port}/"), network: { allow: ["127.0.0.1:#{@port}"] },
+                                                            limits: { cpu_time: 30 }, timeout: 30)
+      refused = MXC.run(curl("http://127.0.0.1:#{@port}/"), network: { allow: ['pypi.org'] },
+                                                            limits: { cpu_time: 30 }, timeout: 30)
+
+      assert_equal '200', allowed.stdout
+      assert_operator allowed.cpu_time, :>, 0
+      assert_equal '403', refused.stdout
+      assert_equal ["127.0.0.1:#{@port}"], refused.blocked
+    end
+
     def test_other_hosts_are_refused_and_reported
       result = MXC.run(curl("http://127.0.0.1:#{@port}/"), network: { allow: ['pypi.org'] }, timeout: 30)
 

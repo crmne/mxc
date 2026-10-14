@@ -77,11 +77,13 @@ A listed backend is installed, which is not the same as usable. Use `supported?`
 ```ruby
 MXC.supports?(:network)          # any network access works
 MXC.supports?(:network_policy)   # host allow-lists work
+MXC.supports?(:memory_limit)     # with_limits(memory: ...) works
 MXC.supports?(:proxy_enforcement)
 ```
 
 * `:network` means `with_network(true)` works.
 * `:network_policy` means `with_network(allow: [...])` works: the network tools are installed and MXC can confine a sandbox to a proxy. It is always `false` on Windows.
+* `:cpu_time_limit`, `:memory_limit`, and `:process_limit` mean the matching [limit]({% link _guides/policies.md %}#limits-and-priority) works, and `:priority` that `with_priority` does.
 * Any other Symbol is checked against the capabilities MXC reports for the backend, such as `:proxy_enforcement`.
 
 ## Errors

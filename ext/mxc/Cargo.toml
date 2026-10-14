@@ -15,6 +15,7 @@ magnus = "0.8.2"
 # until MXC releases them.
 mxc-sdk = { git = "https://github.com/crmne/microsoft-mxc", rev = "21dad14168287bfdbe304266ab30bdbf78b44c32" }
 rb-sys = { version = "0.9.130", features = ["stable-api-compiled-fallback"] }
+serde_json = "1"
 
 [build-dependencies]
 rb-sys-env = "0.2.2"

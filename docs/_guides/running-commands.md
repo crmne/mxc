@@ -76,6 +76,18 @@ result.blocked    # => [] (hosts the network allow-list refused)
 result.backend    # => :bubblewrap
 ```
 
+A sandbox with [limits or a priority]({% link _guides/policies.md %}#limits-and-priority) also reports what the command used:
+
+```ruby
+result = MXC.run("python3 build.py", limits: { cpu_time: 60, memory: 2.gigabytes })
+
+result.cpu_time       # => 3.42
+result.limit_exceeded # => nil
+```
+
+* `cpu_time` is the user and system CPU time of the command and every process it started and waited for, in seconds. It is `nil` for a sandbox without limits or a priority.
+* `limit_exceeded` is `:cpu_time`, `:memory`, or `:processes` when the command ran into that limit, and `nil` otherwise. On Linux and macOS it can only be `:cpu_time`: a program that cannot allocate memory decides itself how to fail, so read its exit code and `stderr`. A command MXC stopped for its timeout reports no limit.
+
 A command that fails is still a result: check `success?` and read `stderr`. `run` raises `MXC::Error` only when the sandbox itself cannot start, as described in [Checking the Host]({% link _guides/checking-the-host.md %}).
 
 `stdout` and `stderr` use `Encoding.default_external`, like `Open3`. A command killed by a signal reports an exit code of `-1`. On Windows, `kill` and timeouts stop the command's whole process tree.

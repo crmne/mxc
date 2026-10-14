@@ -25,7 +25,18 @@ module MXC
     # Returns the backend that ran the command, such as <tt>:bubblewrap</tt>.
     attr_reader :backend
 
-    def initialize(stdout:, stderr:, exit_code:, timed_out:, warnings:, blocked:, backend:) # :nodoc:
+    # Returns the CPU time the command used, user and system, in seconds as a Float. It
+    # includes every process the command started and waited for. Returns nil unless the
+    # sandbox has limits or a priority.
+    attr_reader :cpu_time
+
+    # Returns the limit the command ran into: <tt>:cpu_time</tt>, <tt>:memory</tt>,
+    # <tt>:processes</tt>, or nil. Linux and macOS report <tt>:cpu_time</tt> only, because a
+    # program that cannot allocate memory decides itself how to fail.
+    attr_reader :limit_exceeded
+
+    def initialize(stdout:, stderr:, exit_code:, timed_out:, warnings:, blocked:, backend:, # :nodoc:
+                   cpu_time: nil, limit_exceeded: nil)
       @stdout = text(stdout)
       @stderr = text(stderr)
       @exit_code = exit_code
@@ -33,6 +44,8 @@ module MXC
       @warnings = warnings.freeze
       @blocked = blocked.freeze
       @backend = backend
+      @cpu_time = cpu_time
+      @limit_exceeded = limit_exceeded
     end
 
     # Returns true when the command exited with status 0 before its timeout.
@@ -47,11 +60,13 @@ module MXC
 
     # Returns the result as a Hash.
     def to_h
-      { stdout:, stderr:, exit_code:, timed_out: timed_out?, warnings:, blocked:, backend: }
+      { stdout:, stderr:, exit_code:, timed_out: timed_out?, warnings:, blocked:, backend:, cpu_time:,
+        limit_exceeded: }
     end
 
     def inspect # :nodoc:
-      "#<MXC::Result exit_code=#{exit_code.inspect} timed_out=#{timed_out?} backend=#{backend.inspect}>"
+      usage = " cpu_time=#{cpu_time.round(3)} limit_exceeded=#{limit_exceeded.inspect}" if cpu_time
+      "#<MXC::Result exit_code=#{exit_code.inspect} timed_out=#{timed_out?}#{usage} backend=#{backend.inspect}>"
     end
 
     private

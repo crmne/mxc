@@ -568,6 +568,7 @@ dependencies = [
  "mxc-sdk",
  "rb-sys",
  "rb-sys-env",
+ "serde_json",
 ]
 
 [[package]]

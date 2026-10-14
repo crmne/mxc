@@ -9,9 +9,11 @@ use magnus::{
 use mxc_sdk::v1::{
     self,
     configs::{ProcessContainerConfig, SeatbeltConfig},
-    Containment, ContainerRequest, FilesystemPolicy, MxcProcess, NetworkAction,
-    NetworkEgressPolicy, NetworkPolicy, NetworkRuntimeConfig, StreamCloser, WaitResult,
+    Containment, ContainerRequest, ExecutionMetadata, FilesystemPolicy, MxcProcess,
+    NetworkAction, NetworkEgressPolicy, NetworkPolicy, NetworkRuntimeConfig, ResourceLimit,
+    StreamCloser, WaitResult,
 };
+use serde_json::{json, Map, Value};
 
 mod proxy;
 
@@ -85,6 +87,152 @@ fn deny_all() -> NetworkEgressPolicy {
         default: Some(NetworkAction::Deny),
         ..Default::default()
     }
+}
+
+/// A request ready to start: the typed request, or, when it carries resource
+/// limits, which MXC's typed V1 request cannot express yet, the same request
+/// as `1.1.0-alpha` JSON.
+enum Request {
+    Typed(Box<ContainerRequest>),
+    Json(String),
+}
+
+impl Request {
+    fn run(self) -> Result<v1::ExecutionResult, v1::Error> {
+        match self {
+            Request::Typed(req) => v1::run(*req, Default::default()),
+            Request::Json(json) => mxc_sdk::__ffi::run_json(&json, false),
+        }
+    }
+
+    fn spawn(self) -> Result<MxcProcess, v1::Error> {
+        match self {
+            Request::Typed(req) => v1::spawn(*req, Default::default()),
+            Request::Json(json) => mxc_sdk::__ffi::spawn_container_json(&json, false),
+        }
+    }
+}
+
+fn resources(ruby: &Ruby, opts: RHash) -> Result<Option<Value>, Error> {
+    let Some(limits) = opt::<RHash>(ruby, opts, "resources")? else {
+        return Ok(None);
+    };
+    let mut resources = Map::new();
+    if let Some(ms) = opt::<u64>(ruby, limits, "cpu_time_ms")? {
+        resources.insert("cpuTimeMs".into(), ms.into());
+    }
+    if let Some(mb) = opt::<u64>(ruby, limits, "memory_mb")? {
+        resources.insert("memoryMb".into(), mb.into());
+    }
+    if let Some(count) = opt::<u32>(ruby, limits, "max_processes")? {
+        resources.insert("maxProcesses".into(), count.into());
+    }
+    if let Some(priority) = opt::<String>(ruby, limits, "priority")? {
+        resources.insert("priority".into(), priority.into());
+    }
+    Ok(Some(Value::Object(resources)))
+}
+
+fn action(action: Option<NetworkAction>) -> &'static str {
+    match action {
+        Some(NetworkAction::Allow) => "allow",
+        _ => "deny",
+    }
+}
+
+// Mirrors the 1.0.0 document MXC's typed V1 request produces, plus `resources`.
+fn request_json(ruby: &Ruby, req: &ContainerRequest, resources: Value) -> Result<String, Error> {
+    let filesystem = req.filesystem.clone().unwrap_or_default();
+    let mut process = json!({
+        "commandLine": req.command,
+        "timeout": req.timeout_ms.unwrap_or(0),
+    });
+    if let Some(cwd) = &req.working_directory {
+        process["cwd"] = cwd.clone().into();
+    }
+    if let Some(environment) = &req.environment {
+        let env: Vec<String> = environment
+            .iter()
+            .map(|(k, v)| format!("{k}={v}"))
+            .collect();
+        process["env"] = env.into();
+    }
+    let mut document = json!({
+        "version": "1.1.0-alpha",
+        "containerId": mxc_sdk::mxc_common::id::mint_random_token(),
+        "lifecycle": { "destroyOnExit": true, "preservePolicy": false },
+        "process": process,
+        "filesystem": {
+            "readwritePaths": filesystem.readwrite_paths,
+            "readonlyPaths": filesystem.readonly_paths,
+            "deniedPaths": filesystem.denied_paths,
+        },
+        "resources": resources,
+    });
+    if let Some(network) = &req.network {
+        let default = action(network.egress.as_ref().and_then(|egress| egress.default));
+        document["network"] = json!({ "egress": { "default": default } });
+        if let Some(proxy) = network
+            .runtime_config
+            .as_ref()
+            .and_then(|runtime| runtime.network_proxy.clone())
+        {
+            document["runtimeConfig"] = json!({ "networkProxy": proxy });
+        }
+    }
+    document["containment"] = match &req.containment {
+        Containment::Process => "process".into(),
+        Containment::Bubblewrap => "bubblewrap".into(),
+        Containment::Seatbelt(_) => {
+            document["seatbelt"] = json!({
+                "guiAccess": false,
+                "nestedPty": true,
+                "keychainAccess": false,
+                "extraMachLookups": [],
+            });
+            "seatbelt".into()
+        }
+        Containment::ProcessContainer(_) => {
+            document["processContainer"] = json!({ "leastPrivilege": false, "capabilities": [] });
+            "processcontainer".into()
+        }
+        _ => {
+            return Err(arg_error(
+                ruby,
+                "unsupported backend for resource limits".into(),
+            ))
+        }
+    };
+    Ok(document.to_string())
+}
+
+fn prepare(
+    ruby: &Ruby,
+    command: String,
+    opts: RHash,
+) -> Result<(Request, Option<EgressProxy>), Error> {
+    let (req, egress_proxy) = build_request(ruby, command, opts)?;
+    let request = match resources(ruby, opts)? {
+        Some(resources) => Request::Json(request_json(ruby, &req, resources)?),
+        None => Request::Typed(Box::new(req)),
+    };
+    Ok((request, egress_proxy))
+}
+
+fn usage_into(ruby: &Ruby, h: RHash, metadata: Option<&ExecutionMetadata>) -> Result<(), Error> {
+    let usage = metadata.and_then(|metadata| metadata.resource_usage);
+    let cpu_time =
+        usage.map(|usage| (usage.user_cpu_time_us + usage.system_cpu_time_us) as f64 / 1_000_000.0);
+    let limit = usage.and_then(|usage| usage.limit_exceeded).map(|limit| {
+        ruby.to_symbol(match limit {
+            ResourceLimit::CpuTime => "cpu_time",
+            ResourceLimit::Memory => "memory",
+            ResourceLimit::MaxProcesses => "processes",
+        })
+    });
+    h.aset(ruby.to_symbol("cpu_time"), cpu_time)?;
+    h.aset(ruby.to_symbol("limit_exceeded"), limit)?;
+    Ok(())
 }
 
 fn build_request(
@@ -202,8 +350,8 @@ fn backends(ruby: &Ruby) -> Result<RArray, Error> {
 }
 
 fn run(ruby: &Ruby, command: String, opts: RHash) -> Result<RHash, Error> {
-    let (req, mut egress_proxy) = build_request(ruby, command, opts)?;
-    let result = without_gvl(move || v1::run(req, Default::default()));
+    let (req, mut egress_proxy) = prepare(ruby, command, opts)?;
+    let result = without_gvl(move || req.run());
     let blocked = egress_proxy.as_mut().map(|p| {
         p.stop();
         p.blocked()
@@ -214,6 +362,7 @@ fn run(ruby: &Ruby, command: String, opts: RHash) -> Result<RHash, Error> {
     h.aset(ruby.to_symbol("stderr"), ruby.str_from_slice(&r.stderr))?;
     h.aset(ruby.to_symbol("warnings"), r.warnings)?;
     h.aset(ruby.to_symbol("blocked"), blocked.unwrap_or_default())?;
+    usage_into(ruby, h, r.output_metadata.as_ref())?;
     Ok(h)
 }
 
@@ -233,10 +382,9 @@ struct Process {
 }
 
 fn spawn(ruby: &Ruby, command: String, opts: RHash) -> Result<Process, Error> {
-    let (req, egress_proxy) = build_request(ruby, command, opts)?;
-    let timeout = req.timeout_ms.map(|ms| Duration::from_millis(ms.into()));
-    let mut child = without_gvl(move || v1::spawn(req, Default::default()))
-        .map_err(|e| mxc_error(ruby, e))?;
+    let timeout = opt::<u32>(ruby, opts, "timeout_ms")?.map(|ms| Duration::from_millis(ms.into()));
+    let (req, egress_proxy) = prepare(ruby, command, opts)?;
+    let mut child = without_gvl(move || req.spawn()).map_err(|e| mxc_error(ruby, e))?;
     Ok(Process {
         pid: child.id(),
         deadline: timeout.map(|t| Instant::now() + t),
@@ -315,7 +463,7 @@ impl Process {
 
     // MxcProcess::kill and ::wait both need the handle exclusively, so waiting
     // polls and releases the lock between polls to let kill in.
-    fn await_exit(&self) -> std::io::Result<(WaitResult, Vec<String>)> {
+    fn await_exit(&self) -> std::io::Result<(WaitResult, Vec<String>, Option<ExecutionMetadata>)> {
         let mut nap = Duration::from_millis(1);
         loop {
             {
@@ -327,8 +475,9 @@ impl Process {
                 if expired || child.try_wait()?.is_some() {
                     let outcome = child.wait()?;
                     let warnings = child.warnings();
+                    let metadata = child.output_metadata().cloned();
                     guard.take();
-                    return Ok((outcome, warnings));
+                    return Ok((outcome, warnings, metadata));
                 }
             }
             let mut sleep = nap;
@@ -349,7 +498,7 @@ impl Process {
             }
             None => Vec::new(),
         };
-        let (outcome, warnings) = res.map_err(|e| io_error(ruby, e))?;
+        let (outcome, warnings, metadata) = res.map_err(|e| io_error(ruby, e))?;
         if !matches!(outcome, WaitResult::Exited(_)) {
             if let Some(c) = &rb_self.stdout_closer {
                 c.close();
@@ -361,6 +510,7 @@ impl Process {
         let h = outcome_hash(ruby, outcome)?;
         h.aset(ruby.to_symbol("warnings"), warnings)?;
         h.aset(ruby.to_symbol("blocked"), blocked)?;
+        usage_into(ruby, h, metadata.as_ref())?;
         Ok(h)
     }
 }

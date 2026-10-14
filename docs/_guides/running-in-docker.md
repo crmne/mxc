@@ -13,8 +13,9 @@ After reading this guide, you will know:
 * Two ways to deal with Docker's masked `/proc`, and what each one costs.
 * How to keep untrusted code in an MXC sandbox from creating its own user namespaces.
 * How to configure a Kamal `job` role, and what risks remain.
+* How to bound the whole container's memory, CPU, and processes.
 
-All results below were measured on Linux 7.2 (x86_64), Docker 29.7.2, the `ruby:4.0-slim` image (Debian 13.7, `bubblewrap` 0.12.0) and mxc-sdk 1.0.0. AppArmor was not enabled on the test host. [`test.sh`]({{ '/assets/docker/test.sh' | relative_url }}) reproduces every result, using the probe in [`probe.rb`]({{ '/assets/docker/probe.rb' | relative_url }}) and the image in [`Dockerfile.test`]({{ '/assets/docker/Dockerfile.test' | relative_url }}). Run `bundle exec rake compile`, then `docs/assets/docker/test.sh` from a checkout of the gem.
+All results below were measured on Linux 7.2 (x86_64), Docker 29.7.2, the `ruby:4.0-slim` image (Debian 13.7, `bubblewrap` 0.12.0) and mxc-sdk 1.0.0 with the resource limits of [the fork the gem builds on](https://github.com/crmne/microsoft-mxc). AppArmor was not enabled on the test host. [`test.sh`]({{ '/assets/docker/test.sh' | relative_url }}) reproduces every result, using the probe in [`probe.rb`]({{ '/assets/docker/probe.rb' | relative_url }}) and the image in [`Dockerfile.test`]({{ '/assets/docker/Dockerfile.test' | relative_url }}). Run `bundle exec rake compile`, then `docs/assets/docker/test.sh` from a checkout of the gem.
 
 ## Why a default container fails
 
@@ -205,6 +206,27 @@ Do not set the profile as the daemon default (`seccomp-profile` in `daemon.json`
 ### AppArmor
 
 Not tested. The test host does not run AppArmor (`docker info` lists only `seccomp` and `cgroupns`). On Ubuntu and Debian hosts with AppArmor, Docker applies the `docker-default` profile, which denies `mount`, and Ubuntu 23.10 and later can also restrict unprivileged user namespaces (`kernel.apparmor_restrict_unprivileged_userns`). Expect to need `--security-opt apparmor=unconfined` for the job role or a custom AppArmor profile there, and run `test.sh` on the target host before relying on this page.
+
+## Limiting the container
+
+[Limits]({% link _guides/policies.md %}#limits-and-priority) bound each process in a sandbox, and work in every setup on this page that can start one: a 1 second CPU time limit stopped a busy loop, and a 256 MB memory limit failed a 512 MB allocation. Docker can bound the whole container, every sandbox and the worker together, and covers what per-process limits cannot. Give the job role its own budget so a burst of sandboxed work cannot take memory or CPU from `web`:
+
+```sh
+docker run --memory 4g --cpus 2 --pids-limit 512 ... my-app bin/jobs
+```
+
+* `--memory` caps the container's memory, counted by the kernel across every process. When it runs out, the kernel stops processes inside the container instead of anywhere else on the host.
+* `--cpus` caps the CPU time per second the container may use, so sandboxes share those cores and nothing else.
+* `--pids-limit` caps how many processes and threads the container may hold at once. It is the process limit Linux sandboxes lack: `processes` raises `MXC::UnsupportedError` on Linux, because `RLIMIT_NPROC` would count the worker's own threads.
+
+In Kamal, add them to the job role's `options`:
+
+```yaml
+    options:
+      memory: 4g
+      cpus: 2
+      pids-limit: 512
+```
 
 ## Residual risks
 

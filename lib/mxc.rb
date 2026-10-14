@@ -19,6 +19,11 @@ require 'mxc/sandbox'
 #   result = MXC.run("python3 build.py", readable: "app/skills", writable: "tmp/out", timeout: 30)
 #   result.stdout
 module MXC
+  RESOURCE_CAPABILITIES = {
+    cpu_time_limit: { cpu_time_ms: 1 }, memory_limit: { memory_mb: 1 },
+    process_limit: { max_processes: 1 }, priority: { priority: 'low' }
+  }.freeze # :nodoc:
+
   @availability = {}
   @availability_lock = Mutex.new
 
@@ -85,13 +90,19 @@ module MXC
     # Returns true when this host supports +capability+ with the configured backend.
     #
     # +capability+ is <tt>:network</tt> for unrestricted network access,
-    # <tt>:network_policy</tt> for host allow-lists, or any capability a Backend reports.
+    # <tt>:network_policy</tt> for host allow-lists, <tt>:cpu_time_limit</tt>,
+    # <tt>:memory_limit</tt>, <tt>:process_limit</tt> and <tt>:priority</tt> for the
+    # matching Sandbox#with_limits and Sandbox#with_priority settings, or any capability a
+    # Backend reports.
+    #
+    #   MXC.supports?(:memory_limit) # => false on macOS
     def supports?(capability)
       return false unless supported?
 
       case capability
       when :network then Preflight.problem(network: true).nil?
       when :network_policy then Preflight.problem(network: { allow: [] }).nil? && proxy_enforcement?
+      when *RESOURCE_CAPABILITIES.keys then Preflight.resource_problem(RESOURCE_CAPABILITIES[capability]).nil?
       else configured_backends.any? { |backend| backend.supports?(capability) }
       end
     end

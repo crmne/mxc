@@ -1,7 +1,7 @@
 ---
 title: Policies
 nav_order: 3
-description: Control what a sandboxed command can read, write, and reach, which environment it gets, and how long it runs.
+description: Control what a sandboxed command can read, write, and reach, which environment it gets, how long it runs, and how much it can use.
 ---
 
 After reading this guide, you will know:
@@ -10,6 +10,7 @@ After reading this guide, you will know:
 * How to give a command no network, any network, or a list of allowed hosts.
 * What host allow-lists need from the machine, and where they stop protecting you.
 * How to set the environment, working directory, timeout, and backend.
+* How to limit CPU time, memory, and processes, and lower a command's priority.
 * How policies behave on Windows.
 
 Every policy setting has three forms that mean the same thing: a keyword for `MXC.run` and `MXC::Sandbox.new`, a chainable `with_` setter, and a class macro for `MXC::Sandbox` subclasses.
@@ -136,6 +137,52 @@ MXC.sandbox.with_timeout(2.minutes)
 
 Without a timeout, the command runs until it exits. Set a default for every sandbox with `MXC.configure`.
 
+## Limits and priority
+
+A timeout bounds how long a command runs. Limits bound how much it uses while it runs: a script that spins on the CPU or allocates without end stops at its limit instead of starving your app.
+
+```ruby
+sandbox = MXC.sandbox.with_limits(cpu_time: 2.minutes, memory: 2.gigabytes).with_priority(:low)
+
+MXC.run("python3 build.py", limits: { cpu_time: 120, memory: 2 * 1024**3 }, priority: :low)
+
+class SkillSandbox < MXC::Sandbox
+  limits cpu_time: 2.minutes, memory: 2.gigabytes
+  priority :low
+end
+```
+
+* `cpu_time` is the CPU time each process the command starts may use, in seconds. It takes anything that responds to `to_f`, including `ActiveSupport::Duration`. A process that uses it up is stopped.
+* `memory` is the memory each process may allocate, in bytes. It takes anything that responds to `to_i`, including `2.gigabytes`, and is rounded up to whole megabytes. An allocation beyond it fails, and the program decides what happens next: Python raises `MemoryError`, other programs exit with an error or crash.
+* `processes` is how many processes the command may run at once. Starting another one fails.
+
+`cpu_time` and `memory` apply to each process separately, so a command that starts four workers gets four CPU time budgets. Passing `nil` for a limit removes it, `with_limits(nil)` removes them all, and `limits` reads them back.
+
+`priority` lowers the scheduling priority of the command and everything it starts, so your app stays responsive while it runs. `:normal` is the default, `:low` is nice 10 on Linux and macOS and below normal on Windows, and `:lowest` is nice 19, or idle on Windows.
+
+After a run, `Result#cpu_time` says how much CPU time the command used and `Result#limit_exceeded` which limit stopped it, as described in [Running Commands]({% link _guides/running-commands.md %}#results).
+
+### Limits on each platform
+
+| Limit | Linux | macOS | Windows |
+| --- | --- | --- | --- |
+| `cpu_time` | Yes, whole seconds | Yes, whole seconds | Yes |
+| `memory` | Yes | No | Yes |
+| `processes` | No | No | Yes |
+| `priority` | Yes | Yes | Yes |
+
+A limit the platform cannot enforce raises `MXC::UnsupportedError` before the command starts, with a `remediation` that says what to do instead. `MXC.supports?(:cpu_time_limit)`, `:memory_limit`, `:process_limit`, and `:priority` answer ahead of time.
+
+On Linux and macOS, MXC sets limits with rlimits on the process it starts, and every process the command starts inherits them. On Linux, `memory` limits the heap and private memory (`RLIMIT_DATA`) rather than the address space (`RLIMIT_AS`). Many programs reserve far more address space than they use: LibreOffice crashes converting a small presentation under a 2 GB address-space limit, but converts it under a 2 GB data limit, which still stops a script that allocates 3 GB. macOS refuses both kinds of memory limit, so there is none there.
+
+macOS answers a CPU time limit with a signal a program can ignore, so MXC also stops any process in the sandbox that goes over it. On Linux, a sandbox with limits or a priority runs the command as the first process of its sandbox, so the command collects its own finished background processes and, like any first process, ignores signals sent from inside the sandbox that it has no handler for.
+
+On Windows, MXC applies limits to the job object that holds the command and everything it starts. Windows counts CPU time in user mode only and checks it every few seconds, so a process can run a little past its limit before it stops.
+
+### Counting processes on Linux and macOS
+
+Neither platform can count the processes of one sandbox, so `processes` raises `MXC::UnsupportedError` there. The rlimit that sounds right, `RLIMIT_NPROC`, counts every process of the user, including your app's own. To bound processes, limit the container your app runs in, such as with Docker's `--pids-limit`, as [Running in Docker]({% link _guides/running-in-docker.md %}#limiting-the-container) describes.
+
 ## Backend
 
 `backend` picks the sandbox technology:
@@ -181,4 +228,6 @@ sandbox.readable # => ["app/skills"]
 sandbox.network  # => { allow: ["pypi.org"] }
 sandbox.timeout  # => 30
 sandbox.backend  # => :auto
+sandbox.limits   # => { cpu_time: 120, memory: 2147483648 }
+sandbox.priority # => :low
 ```

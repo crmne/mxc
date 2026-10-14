@@ -12,15 +12,35 @@ module MXC
                          'a sandbox to a proxy only by also accepting inbound connections to it'
     WINDOWS_DENIED = 'Leave the paths out of readable and writable instead, or run on a Windows build where ' \
                      'MXC.supports?(:filesystem_denied_paths) is true'
+    MACOS_MEMORY = 'Leave memory out of the limits on macOS, which rejects memory rlimits. ' \
+                   'Linux and Windows support it'
+    PROCESS_LIMIT = 'Leave processes out of the limits. Only Windows can count the processes of one sandbox; ' \
+                    'in a container, limit them with docker run --pids-limit'
 
     module_function
 
-    def check!(network:, denied: [])
-      error = problem(network:, denied:)
+    def check!(network:, denied: [], resources: nil)
+      error = problem(network:, denied:, resources:)
       raise error if error
     end
 
-    def problem(network:, denied: [], path: ENV.fetch('PATH', ''), tun: TUN)
+    def problem(network:, denied: [], resources: nil, path: ENV.fetch('PATH', ''), tun: TUN)
+      resource_problem(resources) || host_problem(network, denied, path, tun)
+    end
+
+    def resource_problem(resources)
+      return if resources.nil? || windows?
+
+      if resources[:max_processes]
+        UnsupportedError.new("Process limits are not supported on #{linux? ? 'Linux' : 'macOS'}",
+                             code: :backend_unavailable, remediation: PROCESS_LIMIT)
+      elsif resources[:memory_mb] && !linux?
+        UnsupportedError.new('Memory limits are not supported on macOS',
+                             code: :backend_unavailable, remediation: MACOS_MEMORY)
+      end
+    end
+
+    def host_problem(network, denied, path, tun)
       return windows_problem(network, denied) if windows?
       return unless network && linux?
 

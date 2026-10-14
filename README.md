@@ -14,7 +14,7 @@
 
 ---
 
-Your app runs code it did not write: scripts a model generated, skills users uploaded, build steps from someone else. MXC for Ruby runs them in a sandbox that decides what they can read, write, and reach, and how long they get.
+Your app runs code it did not write: scripts a model generated, skills users uploaded, build steps from someone else. MXC for Ruby runs them in a sandbox that decides what they can read, write, and reach, how long they get, and how much CPU and memory they can use.
 
 ```ruby
 result = MXC.run("python3 build.py", readable: "app/skills", writable: "tmp/out", timeout: 30)
@@ -22,7 +22,7 @@ result.stdout
 result.success?
 ```
 
-It is an unofficial Ruby binding to [Microsoft's MXC](https://github.com/microsoft/mxc), the MIT-licensed sandbox library. Not affiliated with or endorsed by Microsoft.
+It is an unofficial Ruby binding to [Microsoft's MXC](https://github.com/microsoft/mxc), the MIT-licensed sandbox library. Not affiliated with or endorsed by Microsoft. Resource limits come from [a fork of MXC](https://github.com/crmne/microsoft-mxc) until they are [part of MXC itself](https://github.com/microsoft/mxc/issues/1498).
 
 ## Installation
 
@@ -68,6 +68,14 @@ result = sandbox.run("pip download --no-deps -d /tmp/wheels requests")
 result.blocked # => hosts the allow-list refused
 ```
 
+Limit what a command can use, and lower its priority so your app stays responsive:
+
+```ruby
+result = sandbox.with_limits(cpu_time: 2.minutes, memory: 2.gigabytes).with_priority(:low).run("python3 build.py")
+result.cpu_time       # => 3.42
+result.limit_exceeded # => nil, or :cpu_time when it ran out
+```
+
 Stream output as it arrives:
 
 ```ruby
@@ -92,6 +100,7 @@ class SkillSandbox < MXC::Sandbox
   writable "tmp/skills"
   network false
   timeout 30
+  limits cpu_time: 60, memory: 1.gigabyte
 end
 
 SkillSandbox.new.run("python3 app/skills/build.py")
@@ -108,10 +117,10 @@ MXC.backends                   # => [#<MXC::Backend name=:bubblewrap ...>]
 
 ## Platforms
 
-| Platform | Backend | 0.1.0 |
+| Platform | Backend | 0.2.0 |
 | --- | --- | --- |
-| Linux | Bubblewrap | Supported and tested |
-| macOS | Seatbelt | Supported and tested |
+| Linux | Bubblewrap | Supported and tested, without process limits |
+| macOS | Seatbelt | Supported and tested, without memory or process limits |
 | Windows 11 24H2 and later | ProcessContainer | Supported and tested, without host allow-lists |
 
 On Windows, a single String runs through `cmd.exe` instead of `sh`. See [Running Commands](https://crmne.github.io/mxc/running-commands/#windows) and [Policies](https://crmne.github.io/mxc/policies/#windows) for what else differs.

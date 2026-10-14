@@ -98,8 +98,8 @@ features:
     link: /policies/#network
     link_text: Network policies
   - icon: ⏱️
-    title: Timeouts, streaming, and processes
-    details: Stop runaway commands, stream output as it arrives, or spawn a process to write to, read from, and kill.
+    title: Timeouts, limits, and streaming
+    details: Stop runaway commands, cap their CPU time and memory, stream output as it arrives, or spawn a process to write to, read from, and kill.
     link: /running-commands/
     link_text: Running commands
   - icon: 💻

@@ -22,19 +22,25 @@ module MXC
   #     writable "tmp/skills"
   #     network false
   #     timeout 30
+  #     limits cpu_time: 60, memory: 2 * 1024**3
+  #     priority :low
   #   end
   #
   #   SkillSandbox.new.run("python3 app/skills/build.py")
   class Sandbox
     BACKENDS = %i[auto bubblewrap seatbelt process_container].freeze # :nodoc:
-    OPTIONS = %i[readable writable denied network env directory timeout backend].freeze # :nodoc:
+    OPTIONS = %i[readable writable denied network env directory timeout backend limits priority].freeze # :nodoc:
     HOST_RESOLVER_SOCKETS = %w[/run/systemd/resolve].freeze # :nodoc:
     WINDOWS_ENV = %w[SYSTEMROOT WINDIR SYSTEMDRIVE COMSPEC PATHEXT PATH LOCALAPPDATA TEMP TMP
                      PROCESSOR_ARCHITECTURE NUMBER_OF_PROCESSORS OS].freeze # :nodoc:
     BATCH_FILE = /\.(bat|cmd)\z/i # :nodoc:
     MAX_TIMEOUT_MS = (2**32) - 1 # :nodoc:
+    LIMITS = %i[cpu_time memory processes].freeze # :nodoc:
+    PRIORITIES = { normal: nil, low: 'low', lowest: 'idle' }.freeze # :nodoc:
+    MEGABYTE = 1024 * 1024 # :nodoc:
     DEFAULTS = {
-      readable: [], writable: [], denied: [], env: {}, network: false, directory: nil, timeout: nil, backend: nil
+      readable: [], writable: [], denied: [], env: {}, network: false, directory: nil, timeout: nil, backend: nil,
+      limits: {}, priority: nil
     }.freeze # :nodoc:
 
     class << self
@@ -61,6 +67,12 @@ module MXC
 
       # Sets every instance's backend.
       def backend(name) = configure { |sandbox| sandbox.with_backend(name) }
+
+      # Sets every instance's resource limits. Takes the same arguments as #with_limits.
+      def limits(...) = configure { |sandbox| sandbox.with_limits(...) }
+
+      # Sets every instance's scheduling priority: <tt>:normal</tt>, <tt>:low</tt>, or <tt>:lowest</tt>.
+      def priority(level) = configure { |sandbox| sandbox.with_priority(level) }
 
       def defaults # :nodoc:
         @defaults ||= allocate.tap { |sandbox| sandbox.send(:inherit, self == Sandbox ? nil : superclass.defaults) }
@@ -95,9 +107,11 @@ module MXC
 
     # Returns a new sandbox with the class's defaults, then applies +options+ through
     # the matching setters: <tt>readable:</tt>, <tt>writable:</tt>, <tt>denied:</tt>,
-    # <tt>network:</tt>, <tt>env:</tt>, <tt>directory:</tt>, <tt>timeout:</tt> and <tt>backend:</tt>.
+    # <tt>network:</tt>, <tt>env:</tt>, <tt>directory:</tt>, <tt>timeout:</tt>, <tt>backend:</tt>,
+    # <tt>limits:</tt> and <tt>priority:</tt>.
     #
     #   MXC::Sandbox.new(readable: "app/skills", network: { allow: ["pypi.org"] }, timeout: 30)
+    #   MXC::Sandbox.new(limits: { cpu_time: 60, memory: 2 * 1024**3 }, priority: :low)
     def initialize(**options)
       unknown = options.keys - OPTIONS
       raise ArgumentError, "unknown option#{'s' if unknown.size > 1}: #{unknown.join(', ')}" if unknown.any?
@@ -134,6 +148,13 @@ module MXC
 
     # Returns the backend, falling back to MXC.config.backend.
     def backend = @settings[:backend] || MXC.config.backend
+
+    # Returns the resource limits, such as <tt>{ cpu_time: 60, memory: 2147483648 }</tt>.
+    # A limit that is not set is absent.
+    def limits = @settings[:limits].dup.freeze
+
+    # Returns the scheduling priority: <tt>:normal</tt>, <tt>:low</tt>, or <tt>:lowest</tt>.
+    def priority = @settings[:priority] || :normal
 
     # Adds paths the command can read. Accepts Strings and Pathnames; relative paths
     # are expanded from the current directory when the command runs.
@@ -204,6 +225,42 @@ module MXC
       self
     end
 
+    # Sets resource limits. Each process the command starts gets its own CPU time and memory.
+    #
+    # <tt>cpu_time:</tt> is the CPU time each process may use, in seconds. It accepts
+    # anything that responds to +to_f+, such as <tt>90</tt> or <tt>2.minutes</tt>, and is
+    # rounded up to whole seconds on Linux and macOS. A process that uses it up is stopped.
+    #
+    # <tt>memory:</tt> is the memory each process may allocate, in bytes. It accepts
+    # anything that responds to +to_i+, such as <tt>2 * 1024**3</tt> or
+    # <tt>2.gigabytes</tt>, and is rounded up to whole megabytes. Allocations beyond it
+    # fail. Not available on macOS.
+    #
+    # <tt>processes:</tt> is how many processes the command may run at the same time.
+    # Windows only.
+    #
+    # A limit given as +nil+ is removed, and <tt>with_limits(nil)</tt> removes them all.
+    # Raises ArgumentError for an unknown limit or a value that is not positive.
+    #
+    #   sandbox.with_limits(cpu_time: 2.minutes, memory: 2.gigabytes)
+    def with_limits(reset = (keep = true), **limits)
+      unless keep
+        raise ArgumentError, "pass limits as keywords, or nil to remove them, got #{reset.inspect}" unless reset.nil?
+
+        @settings[:limits].clear
+      end
+      limits.each { |name, value| set_limit(name, value) }
+      self
+    end
+
+    # Sets the scheduling priority of every process the command starts: <tt>:normal</tt>
+    # (the default), <tt>:low</tt> (nice 10 on Linux and macOS, below normal on
+    # Windows), or <tt>:lowest</tt> (nice 19, or idle on Windows).
+    def with_priority(level)
+      @settings[:priority] = level && priority_name(level)
+      self
+    end
+
     # Runs +command+ and returns its Result once it finishes. Like Kernel#system, one
     # String runs through the platform shell: <tt>sh -c</tt>, or <tt>cmd.exe /d /s /c</tt>
     # on Windows. Two or more Strings are a program and its arguments, and each argument
@@ -241,15 +298,16 @@ module MXC
     # Returns the Availability of this sandbox on this host, with the reason and
     # remediation when it cannot run.
     def availability
-      problem = Preflight.problem(network:, denied:)
+      problem = Preflight.problem(network:, denied:, resources:)
       return MXC.availability(backend:) unless problem
 
       Availability.new(backend:, supported: false, reason: problem.message, remediation: problem.remediation)
     end
 
     def inspect # :nodoc:
+      resources = " limits=#{limits.inspect} priority=#{priority.inspect}" if self.resources
       "#<#{self.class.name || 'MXC::Sandbox'} backend=#{backend.inspect} network=#{network.inspect} " \
-        "readable=#{readable.inspect} writable=#{writable.inspect} timeout=#{timeout.inspect}>"
+        "readable=#{readable.inspect} writable=#{writable.inspect} timeout=#{timeout.inspect}#{resources}>"
     end
 
     protected
@@ -266,8 +324,40 @@ module MXC
       case name
       when :readable, :writable, :denied then public_send(:"with_#{name}", *Array(value))
       when :network then value.is_a?(Hash) ? with_network(**value) : with_network(value)
+      when :limits then value.nil? ? with_limits(nil) : with_limits(**value)
       else public_send(:"with_#{name}", value)
       end
+    end
+
+    def set_limit(name, value)
+      unless LIMITS.include?(name)
+        raise ArgumentError, "unknown limit #{name.inspect}, expected one of #{LIMITS.map(&:inspect).join(', ')}"
+      end
+      return @settings[:limits].delete(name) if value.nil?
+
+      @settings[:limits][name] = positive_limit(name, value)
+    end
+
+    def positive_limit(name, value)
+      amount = limit_amount(name, value)
+      raise ArgumentError, "#{name} must be a positive number, got #{value.inspect}" unless amount&.positive?
+
+      value
+    end
+
+    def limit_amount(name, value)
+      return (value if value.is_a?(Integer)) if name == :processes
+
+      conversion = name == :cpu_time ? :to_f : :to_i
+      value.public_send(conversion) if value.respond_to?(conversion)
+    end
+
+    def priority_name(level)
+      level = level.to_sym
+      return level if PRIORITIES.key?(level)
+
+      raise ArgumentError,
+            "unknown priority #{level.inspect}, expected one of #{PRIORITIES.keys.map(&:inspect).join(', ')}"
     end
 
     def add_paths(name, paths)
@@ -322,7 +412,7 @@ module MXC
     end
 
     def request
-      Preflight.check!(network:, denied:)
+      Preflight.check!(network:, denied:, resources:)
       {
         readonly: expand(readable),
         readwrite: expand(writable),
@@ -332,9 +422,27 @@ module MXC
         timeout_ms: timeout && [(timeout.to_f * 1000).ceil, MAX_TIMEOUT_MS].min,
         backend:,
         network: network == true,
-        allow: network.is_a?(Hash) ? network[:allow] : nil
+        allow: network.is_a?(Hash) ? network[:allow] : nil,
+        resources:
       }
     end
+
+    protected
+
+    # The resource limits as MXC takes them, or nil when there are none.
+    def resources
+      limits = @settings[:limits]
+      return if limits.empty? && priority == :normal
+
+      {
+        cpu_time_ms: limits[:cpu_time] && (limits[:cpu_time].to_f * 1000).ceil,
+        memory_mb: limits[:memory] && -(-limits[:memory].to_i / MEGABYTE),
+        max_processes: limits[:processes],
+        priority: PRIORITIES.fetch(priority)
+      }.compact
+    end
+
+    private
 
     def expand(paths)
       paths.map { |path| native_path(File.expand_path(path)) }

@@ -40,6 +40,33 @@ module MXC
       assert_nil result.exit_code
     end
 
+    def test_reports_cpu_time_with_limits_or_a_priority
+      result = MXC.run('for /l %i in (1,1,20000) do @rem', priority: :low)
+
+      assert_predicate result, :success?
+      assert_kind_of Float, result.cpu_time
+      assert_nil result.limit_exceeded
+      assert_nil MXC.run('echo hi').cpu_time
+    end
+
+    def test_a_cpu_time_limit_stops_the_command
+      result = MXC.run(FOREVER, limits: { cpu_time: 1 }, timeout: 30)
+
+      refute_predicate result, :success?
+      refute_predicate result, :timed_out?
+      assert_equal :cpu_time, result.limit_exceeded
+    end
+
+    def test_a_process_limit_refuses_more_processes
+      refused = MXC.run('cmd /c echo inner', limits: { processes: 1 })
+      allowed = MXC.run('cmd /c echo inner', limits: { processes: 2 })
+
+      refute_predicate refused, :success?
+      assert_equal :processes, refused.limit_exceeded
+      assert_equal "inner\r\n", allowed.stdout
+      assert_nil allowed.limit_exceeded
+    end
+
     def test_reads_only_readable_paths_and_writes_only_writable_ones
       script = "type #{@readable}\\input.txt > #{@writable}\\output.txt&" \
                "(echo x> #{@readable}\\hack) 2>NUL || echo read-only"
