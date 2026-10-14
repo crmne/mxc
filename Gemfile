@@ -10,6 +10,7 @@ gem 'minitest', '~> 5.25'
 gem 'overcommit'
 gem 'rake', '~> 13.0'
 gem 'rake-compiler'
+gem 'rbs', '< 4.2' # 4.2 requires Ruby 3.3
 gem 'rdoc'
 gem 'rubocop'
 gem 'rubocop-minitest'
