@@ -165,7 +165,7 @@ This section applies only when this repository builds Rust.
 1. Bump `MXC::VERSION` in `lib/mxc/version.rb` and `version` in `ext/mxc/Cargo.toml`.
 2. Write `packaging/release-notes/vX.Y.Z.md` and commit it with the version bump.
 3. Tag `vX.Y.Z` on `main`, push the tag, and publish a GitHub release from it with `gh release create vX.Y.Z --verify-tag --notes-file packaging/release-notes/vX.Y.Z.md`.
-4. Publishing the release runs `.github/workflows/release.yml`: it checks the tag, version, and notes, cross-compiles the native gems, and pushes them and the source gem to RubyGems through trusted publishing.
+4. Publishing the release runs `.github/workflows/release.yml`: it checks the tag, version, and notes, cross-compiles the native gems, and pushes them and the source gem to RubyGems with the `RUBYGEMS_AUTH_TOKEN` repository secret.
 
 <!-- github-automation: release-notes -->
 ## Releases

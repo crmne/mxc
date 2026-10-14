@@ -132,7 +132,6 @@ jobs:
     environment: rubygems
     permissions:
       contents: read
-      id-token: write
     steps:
       - uses: ruby/setup-ruby@v1
         with:
@@ -142,11 +141,16 @@ jobs:
           pattern: gem-*
           path: pkg
           merge-multiple: true
-      - uses: rubygems/configure-rubygems-credentials@v1
       - name: Push gems
+        env:
+          GEM_HOST_API_KEY: ${{ secrets.RUBYGEMS_AUTH_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
+          if [ -z "$GEM_HOST_API_KEY" ]; then
+            echo "RUBYGEMS_AUTH_TOKEN is not configured." >&2
+            exit 1
+          fi
           ls -l pkg
           # Native gems first, so `gem install` never resolves to the source gem
           # on a platform whose precompiled gem is about to appear.
