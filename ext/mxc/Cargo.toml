@@ -1,0 +1,18 @@
+[package]
+name = "mxc"
+version = "0.1.0"
+edition = "2021"
+authors = ["Carmine Paolino <carmine@paolino.me>"]
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+magnus = "0.8.2"
+mxc-sdk = "=1.0.0"
+rb-sys = { version = "0.9.130", features = ["stable-api-compiled-fallback"] }
+
+[build-dependencies]
+rb-sys-env = "0.2.2"

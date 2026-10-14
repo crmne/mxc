@@ -1,0 +1,6 @@
+[workspace]
+members = ["./ext/mxc"]
+resolver = "2"
+
+[profile.release]
+strip = "debuginfo"

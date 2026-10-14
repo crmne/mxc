@@ -1,0 +1,15 @@
+# Pin the toolchain so local builds, CI, and the cross-compiled release gems
+# use the same compiler. rb-sys-dock honors this file, so it must list every
+# release target. Upgrading is deliberate: bump the version here and in
+# mise.toml, fix what the new lints find, one commit.
+[toolchain]
+channel = "1.99.0"
+components = ["rustfmt", "clippy"]
+targets = [
+  "x86_64-unknown-linux-gnu",
+  "x86_64-unknown-linux-musl",
+  "aarch64-unknown-linux-gnu",
+  "aarch64-unknown-linux-musl",
+  "x86_64-apple-darwin",
+  "aarch64-apple-darwin",
+]

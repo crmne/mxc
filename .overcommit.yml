@@ -1,0 +1,19 @@
+PreCommit:
+  RuboCop:
+    enabled: true
+    auto_correct: true
+    on_warn: fail
+
+  Minitest:
+    enabled: true
+    description: 'Compile the extension and run the tests'
+    command: ['bundle', 'exec', 'rake', 'compile', 'test', 'test:proxy']
+    on_warn: fail
+
+  TrailingWhitespace:
+    enabled: true
+    auto_correct: true
+
+PostCheckout:
+  ALL:
+    quiet: true

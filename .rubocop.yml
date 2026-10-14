@@ -1,0 +1,35 @@
+plugins:
+  - rubocop-minitest
+  - rubocop-performance
+  - rubocop-rake
+
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 3.2
+  SuggestExtensions: false
+  Exclude:
+    - docs/**/*
+    - tmp/**/*
+    - vendor/**/*
+    - target/**/*
+
+Metrics/AbcSize:
+  Max: 40
+Metrics/ClassLength:
+  Max: 300
+Metrics/MethodLength:
+  Max: 25
+  CountAsOne:
+    - array
+    - hash
+    - heredoc
+Minitest/MultipleAssertions:
+  Max: 10
+Style/FormatStringToken:
+  Exclude:
+    - test/**/*
+Style/OptionalBooleanParameter:
+  AllowedMethods:
+    - with_network
+Metrics/ParameterLists:
+  CountKeywordArgs: false

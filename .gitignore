@@ -1,0 +1,16 @@
+/.bundle/
+/doc/
+/pkg/
+/tmp/
+/target/
+/registry/
+/vendor/
+/docs/_site/
+/docs/.jekyll-cache/
+/docs/.bundle/
+/docs/vendor/
+*.bundle
+*.so
+*.o
+*.a
+mkmf.log
