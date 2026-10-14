@@ -13,6 +13,7 @@ module MXC
   #     .with_network(allow: ["pypi.org", "*.pythonhosted.org"])
   #     .with_timeout(30)
   #   sandbox.run("python3 app/skills/build.py")
+  #   sandbox.run("python3", "app/skills/convert.py", params[:filename])
   #
   # Subclasses declare the same settings with class macros:
   #
@@ -203,22 +204,32 @@ module MXC
       self
     end
 
-    # Runs +command+ and returns its Result once it finishes. A String runs through
-    # the platform shell: <tt>sh -c</tt>, or <tt>cmd.exe /c</tt> on Windows. An Array
-    # is a program and its arguments, each of which reaches the program unchanged.
+    # Runs +command+ and returns its Result once it finishes. Like Kernel#system, one
+    # String runs through the platform shell: <tt>sh -c</tt>, or <tt>cmd.exe /d /s /c</tt>
+    # on Windows. Two or more Strings are a program and its arguments, and each argument
+    # reaches the program unchanged, without a shell.
     #
     # With a block, yields each Chunk of output as it arrives.
     #
-    #   sandbox.run(["python3", "build.py"]) { |chunk| print chunk.content }
-    def run(command, &)
-      return stream(command, &) if block_given?
+    #   sandbox.run("python3 build.py && ls dist")
+    #   sandbox.run("python3", "convert.py", params[:filename])
+    #   sandbox.run("python3", "build.py") { |chunk| print chunk.content }
+    #
+    # Raises ArgumentError without a command or when given an Array. On Windows, it also
+    # raises ArgumentError for a program and arguments that start a +.bat+ or +.cmd+ file,
+    # because Windows runs those through +cmd.exe+, which splits the arguments again.
+    def run(*command, &)
+      return stream(*command, &) if block_given?
 
       outcome = StartupFailure.check!(Native.run(command_line(command), request))
       Result.new(**outcome, backend: resolved_backend)
     end
 
-    # Starts +command+ and returns its Process without waiting for it.
-    def spawn(command)
+    # Starts +command+ and returns its Process without waiting for it. Takes the command
+    # the same way as #run.
+    #
+    #   sandbox.spawn("python3", "-i", "-q")
+    def spawn(*command)
       Process.new(Native.spawn(command_line(command), request), backend: resolved_backend)
     end
 
@@ -265,8 +276,8 @@ module MXC
       self
     end
 
-    def stream(command, &)
-      process = spawn(command)
+    def stream(*command, &)
+      process = spawn(*command)
       finished = false
       process.each(&)
       finished = true
@@ -276,21 +287,31 @@ module MXC
     end
 
     def command_line(command)
-      return command_line_for_windows(command) if Preflight.windows?
+      arguments = command_arguments(command)
+      return command_line_for_windows(arguments) if Preflight.windows?
 
-      command.is_a?(Array) ? Shellwords.join(command.map(&:to_s)) : command.to_s
+      arguments.one? ? arguments.first : Shellwords.join(arguments)
     end
 
-    def command_line_for_windows(command)
-      return %(cmd.exe /d /s /c "#{command}") unless command.is_a?(Array)
-
-      program, = command
-      if program.to_s.match?(BATCH_FILE)
-        raise ArgumentError, 'Windows runs batch files through cmd.exe, which does not keep arguments apart. ' \
-                             'Run them with a String command and quote untrusted input yourself'
+    def command_arguments(command)
+      raise ArgumentError, 'no command given' if command.empty?
+      if command.any?(Array)
+        raise ArgumentError, 'pass the program and its arguments as separate Strings, ' \
+                             'as in run("python3", "build.py"), not as an Array'
       end
 
-      command.map { |argument| WindowsArguments.quote(argument.to_s) }.join(' ')
+      command.map { |argument| String.try_convert(argument) || File.path(argument) }
+    end
+
+    def command_line_for_windows(arguments)
+      return %(cmd.exe /d /s /c "#{arguments.first}") if arguments.one?
+
+      if arguments.first.match?(BATCH_FILE)
+        raise ArgumentError, 'Windows runs batch files through cmd.exe, which does not keep arguments apart. ' \
+                             'Run them with one String and quote untrusted input yourself'
+      end
+
+      arguments.map { |argument| WindowsArguments.quote(argument) }.join(' ')
     end
 
     def resolved_backend

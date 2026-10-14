@@ -125,10 +125,25 @@ module MXC
       assert_equal 20_000, result.stdout.lines.size
     end
 
-    def test_array_commands_are_not_interpreted_by_the_shell
-      result = MXC.run(['echo', '$HOME; echo injected'])
+    def test_arguments_are_not_interpreted_by_the_shell
+      result = MXC.run('printf', '[%s]\n', '$HOME; echo injected', 'a b', 'c"d', '')
 
-      assert_equal "$HOME; echo injected\n", result.stdout
+      assert_equal "[$HOME; echo injected]\n[a b]\n[c\"d]\n[]\n", result.stdout
+    end
+
+    def test_streams_a_program_and_its_arguments
+      chunks = []
+      result = MXC.sandbox.run('echo', 'a  b') { |chunk| chunks << chunk.content }
+
+      assert_equal "a  b\n", chunks.join
+      assert_predicate result, :success?
+    end
+
+    def test_spawns_a_program_and_its_arguments
+      process = MXC.spawn('cat', '-u', timeout: 5)
+      process.write("ping\n")
+
+      assert_equal "ping\n", process.wait.stdout
     end
 
     def test_a_sandbox_without_network_cannot_resolve_names

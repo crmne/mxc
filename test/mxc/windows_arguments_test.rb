@@ -28,6 +28,14 @@ module MXC
       assert_equal ARGUMENTS, command_line_to_argv(line).drop(1)
     end
 
+    def test_programs_and_arguments_reach_command_line_to_argv_unchanged
+      skip 'CommandLineToArgvW is a Windows API' unless Preflight.windows?
+
+      line, = capture_request(MXC.sandbox, 'C:\\Program Files\\tool.exe', *ARGUMENTS)
+
+      assert_equal ['C:\\Program Files\\tool.exe', *ARGUMENTS], command_line_to_argv(line)
+    end
+
     private
 
     def command_line_to_argv(line)

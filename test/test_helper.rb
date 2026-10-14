@@ -25,13 +25,13 @@ module SandboxHelpers
     OUTCOME.merge(overrides)
   end
 
-  def capture_request(sandbox, command = 'true')
+  def capture_request(sandbox, *command)
     captured = nil
     MXC::Native.stub(:run, lambda { |line, request|
       captured = [line, request]
       outcome
     }) do
-      MXC::Preflight.stub(:check!, nil) { sandbox.run(command) }
+      MXC::Preflight.stub(:check!, nil) { sandbox.run(*command.empty? ? ['true'] : command) }
     end
     captured
   end

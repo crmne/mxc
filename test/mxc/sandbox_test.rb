@@ -158,10 +158,61 @@ module MXC
       refute_includes open[:denied], '/run/systemd/resolve'
     end
 
-    def test_array_commands_are_escaped
-      line, = Preflight.stub(:windows?, false) { capture_request(MXC.sandbox, ['printf', '%s', 'a b; rm -rf /']) }
+    def test_one_string_runs_through_the_shell
+      line, = Preflight.stub(:windows?, false) { capture_request(MXC.sandbox, 'echo $HOME && ls | wc -l') }
 
-      assert_equal Shellwords.join(['printf', '%s', 'a b; rm -rf /']), line
+      assert_equal 'echo $HOME && ls | wc -l', line
+    end
+
+    def test_programs_and_arguments_are_escaped
+      line, = Preflight.stub(:windows?, false) { capture_request(MXC.sandbox, 'printf', '%s', 'a b; rm -rf /', '') }
+
+      assert_equal Shellwords.join(['printf', '%s', 'a b; rm -rf /', '']), line
+    end
+
+    def test_programs_and_arguments_accept_pathnames
+      line, = Preflight.stub(:windows?, false) { capture_request(MXC.sandbox, Pathname('/usr/bin/env'), 'a b') }
+
+      assert_equal '/usr/bin/env a\\ b', line
+    end
+
+    def test_arrays_raise
+      [[%w[python3 build.py]], ['python3', %w[build.py]]].each do |command|
+        error = assert_raises(ArgumentError) { capture_request(MXC.sandbox, *command) }
+
+        assert_match 'separate Strings', error.message
+      end
+    end
+
+    def test_arrays_raise_before_anything_starts
+      MXC::Native.stub(:spawn, ->(*) { flunk 'spawned an Array command' }) do
+        assert_raises(ArgumentError) { MXC.spawn(%w[python3 build.py]) }
+        assert_raises(ArgumentError) { MXC.run(%w[python3 build.py]) { nil } }
+      end
+    end
+
+    def test_a_missing_command_raises
+      assert_raises(ArgumentError) { MXC.run }
+      assert_raises(ArgumentError) { MXC.sandbox.spawn }
+    end
+
+    def test_arguments_that_are_not_strings_raise
+      assert_raises(TypeError) { capture_request(MXC.sandbox, 'sleep', 5) }
+      assert_raises(TypeError) { capture_request(MXC.sandbox, 'ls', { timeout: 5 }) }
+    end
+
+    def test_module_run_takes_the_command_and_policy_keywords
+      captured = nil
+      native = lambda { |line, request|
+        captured = [line, request]
+        outcome
+      }
+      Preflight.stub(:windows?, false) do
+        MXC::Native.stub(:run, native) { MXC.run('python3', 'build.py', 'a b', timeout: 30) }
+      end
+
+      assert_equal 'python3 build.py a\\ b', captured[0]
+      assert_equal 30_000, captured[1][:timeout_ms]
     end
 
     def test_run_returns_a_result
@@ -199,10 +250,10 @@ module MXC
   end
 
   class WindowsRequestTest < Minitest::Test
-    def on_windows(sandbox, command = 'exit 0', env: ENV.to_h, &)
+    def on_windows(sandbox, *command, env: ENV.to_h, &)
       Preflight.stub(:windows?, true) do
         ENV.stub(:to_h, env) do
-          ENV.stub(:fetch, ->(name, *) { env[name] }) { capture_request(sandbox, command) }
+          ENV.stub(:fetch, ->(name, *) { env[name] }) { capture_request(sandbox, *command) }
         end
       end
     end
@@ -213,16 +264,26 @@ module MXC
       assert_equal 'cmd.exe /d /s /c "echo hi & exit 3"', line
     end
 
-    def test_arrays_are_quoted_for_command_line_to_argv
-      line, = on_windows(MXC.sandbox, ['C:\\Program Files\\tool.exe', 'a b', 'say "hi"', 'dir\\', '', 'plain'])
+    def test_programs_and_arguments_are_quoted_for_command_line_to_argv
+      line, = on_windows(MXC.sandbox, 'C:\\Program Files\\tool.exe', 'a b', 'say "hi"', 'dir\\', '', 'plain')
 
       assert_equal '"C:\\Program Files\\tool.exe" "a b" "say \\"hi\\"" dir\\ "" plain', line
     end
 
-    def test_arrays_refuse_batch_files
-      error = assert_raises(ArgumentError) { on_windows(MXC.sandbox, ['build.CMD', 'x & y']) }
+    def test_programs_and_arguments_refuse_batch_files
+      error = assert_raises(ArgumentError) { on_windows(MXC.sandbox, 'build.CMD', 'x & y') }
 
       assert_match 'cmd.exe', error.message
+    end
+
+    def test_one_string_may_start_a_batch_file_through_cmd
+      line, = on_windows(MXC.sandbox, 'build.cmd x')
+
+      assert_equal 'cmd.exe /d /s /c "build.cmd x"', line
+    end
+
+    def test_arrays_raise
+      assert_raises(ArgumentError) { on_windows(MXC.sandbox, %w[findstr.exe a]) }
     end
 
     def test_paths_use_backslashes

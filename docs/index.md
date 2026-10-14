@@ -50,7 +50,7 @@ hero:
         ```ruby
         sandbox = SkillSandbox.new
 
-        sandbox.run(["python3", "build.py"]) do |chunk|
+        sandbox.run("python3", "build.py") do |chunk|
           print chunk.content
         end
         ```

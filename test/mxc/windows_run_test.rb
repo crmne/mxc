@@ -129,6 +129,15 @@ module MXC
       assert_equal "started\r\n", result.stdout
     end
 
+    def test_spawned_programs_take_arguments_and_input
+      process = MXC.spawn(FINDSTR, '/c:p g', timeout: 5)
+      process.write("p g\r\nother\r\n")
+      process.close_write
+
+      assert_equal "p g\r\n", process.each.map(&:content).join
+      assert_predicate process.wait, :success?
+    end
+
     def test_spawned_processes_take_input
       process = MXC.spawn(%("#{FINDSTR}" .*), timeout: 5)
       process.write("ping\r\n")
@@ -162,14 +171,14 @@ module MXC
       assert_predicate MXC.run(%("#{FINDSTR}" /?)), :success?
     end
 
-    def test_array_arguments_reach_the_program_unchanged
-      result = MXC.run([FINDSTR, '/c:a b', "#{@readable}\\input.txt"], readable: @readable)
+    def test_arguments_reach_the_program_unchanged
+      result = MXC.run(FINDSTR, '/c:a b', "#{@readable}\\input.txt", readable: @readable)
 
       assert_equal "a b\r\n", result.stdout
     end
 
-    def test_array_arguments_are_not_interpreted_by_cmd
-      result = MXC.run([FINDSTR, '/c:%PATH%&echo injected', "#{@readable}\\input.txt"], readable: @readable)
+    def test_arguments_are_not_interpreted_by_cmd
+      result = MXC.run(FINDSTR, '/c:%PATH%&echo injected', "#{@readable}\\input.txt", readable: @readable)
 
       assert_empty result.stdout
       refute_match 'injected', result.stderr

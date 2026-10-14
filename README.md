@@ -46,6 +46,12 @@ Run a command. It sees the system's programs read-only, nothing of your home dir
 MXC.run("python3 -c 'print(6 * 7)'").stdout # => "42\n"
 ```
 
+One String runs through the shell, like `Kernel#system`. Pass the program and its arguments separately when part of the command comes from users, so each one reaches the program unchanged:
+
+```ruby
+MXC.run("python3", "convert.py", params[:filename])
+```
+
 Build a policy with chainable setters:
 
 ```ruby
@@ -108,7 +114,7 @@ MXC.backends                   # => [#<MXC::Backend name=:bubblewrap ...>]
 | macOS | Seatbelt | Supported and tested |
 | Windows 11 24H2 and later | ProcessContainer | Supported and tested, without host allow-lists |
 
-On Windows, String commands run through `cmd.exe` instead of `sh`. See [Running Commands](https://crmne.github.io/mxc/running-commands/#windows) and [Policies](https://crmne.github.io/mxc/policies/#windows) for what else differs.
+On Windows, a single String runs through `cmd.exe` instead of `sh`. See [Running Commands](https://crmne.github.io/mxc/running-commands/#windows) and [Policies](https://crmne.github.io/mxc/policies/#windows) for what else differs.
 
 Docker blocks the namespaces Bubblewrap needs by default. [Running in Docker](https://crmne.github.io/mxc/running-in-docker/) shows the smallest set of changes that makes it work, with a seccomp profile and a Kamal configuration for a job role.
 

@@ -42,18 +42,22 @@ module MXC
       Sandbox.new(**)
     end
 
-    # Runs +command+ in a new sandbox configured by +options+ and returns its Result.
-    # Takes the same keywords as Sandbox.new. A block receives each Chunk of output as it arrives.
+    # Runs +command+ in a new sandbox and returns its Result. Takes the command the same
+    # way as Sandbox#run, one String for the shell or a program and its arguments, and the
+    # same keywords as Sandbox.new. A block receives each Chunk of output as it arrives.
     #
     #   MXC.run("python3 build.py", readable: "app/skills", timeout: 30)
-    def run(command, **, &)
-      sandbox(**).run(command, &)
+    #   MXC.run("python3", "convert.py", params[:filename], readable: "app/skills")
+    def run(*command, **, &)
+      sandbox(**).run(*command, &)
     end
 
-    # Starts +command+ in a new sandbox configured by +options+ and returns its Process.
-    # Takes the same keywords as Sandbox.new.
-    def spawn(command, **)
-      sandbox(**).spawn(command)
+    # Starts +command+ in a new sandbox and returns its Process. Takes the command the
+    # same way as Sandbox#run, and the same keywords as Sandbox.new.
+    #
+    #   MXC.spawn("python3", "-i", "-q", timeout: 60)
+    def spawn(*command, **)
+      sandbox(**).spawn(*command)
     end
 
     # Returns true when this host can start a sandbox with +backend+.
