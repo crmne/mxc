@@ -2,7 +2,7 @@
 title: Overview
 nav_order: 0
 description: Run untrusted commands from Ruby in an OS sandbox that controls what they read, write, and reach.
-permalink: /
+permalink: /overview/
 ---
 
 MXC for Ruby runs a command in an operating system sandbox and hands you back its output. You decide which paths the command can read and write, whether it gets the network, which hosts it may reach, and how long it may run.
