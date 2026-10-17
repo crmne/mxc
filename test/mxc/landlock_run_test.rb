@@ -33,6 +33,21 @@ module MXC
       refute_predicate MXC.run("ls #{Dir.home}"), :success?
     end
 
+    def test_metadata_outside_the_policy_stays_unchanged
+      key = File.join(@dir, 'key')
+      File.write(key, 'secret')
+      File.chmod(0o600, key)
+      File.write(File.join(@writable, 'out'), '')
+      result = MXC.run("chmod 644 #{key}; touch -d 2001-01-01 #{key}; chmod +x out; touch out new && echo touched",
+                       writable: @writable, directory: @writable)
+
+      assert_equal 0o600, File.stat(key).mode & 0o777
+      assert_match 'Operation not permitted', result.stderr
+      assert_equal "touched\n", result.stdout
+      assert_path_exists File.join(@writable, 'new')
+      refute File.executable?(File.join(@writable, 'out'))
+    end
+
     def test_denied_paths_inside_a_grant_are_refused
       error = assert_raises(UnsupportedError) { MXC.run('true', writable: @writable, denied: "#{@writable}/secret") }
 

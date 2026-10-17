@@ -13,7 +13,7 @@ crate-type = ["cdylib"]
 magnus = "0.8.2"
 # A fork of mxc-sdk 1.0.0 that adds resource limits (microsoft/mxc#1498) and
 # a Landlock backend (microsoft/mxc#1494), until MXC releases them.
-mxc-sdk = { git = "https://github.com/crmne/microsoft-mxc", rev = "b39a69ca8af93ba4979d3b8c5349892fcc10ceee" }
+mxc-sdk = { git = "https://github.com/crmne/microsoft-mxc", rev = "d57b0d1aa3a2d552001fa54ef4ac4baaa733c26d" }
 rb-sys = { version = "0.9.130", features = ["stable-api-compiled-fallback"] }
 serde_json = "1"
 
