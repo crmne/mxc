@@ -28,7 +28,8 @@ module MXC
   #
   #   SkillSandbox.new.run("python3 app/skills/build.py")
   class Sandbox
-    BACKENDS = %i[auto bubblewrap seatbelt process_container].freeze # :nodoc:
+    BACKENDS = %i[auto bubblewrap landlock seatbelt process_container].freeze # :nodoc:
+    LANDLOCK_FALLBACK = /runs on Landlock instead/ # :nodoc:
     OPTIONS = %i[readable writable denied network env directory timeout backend limits priority].freeze # :nodoc:
     HOST_RESOLVER_SOCKETS = %w[/run/systemd/resolve].freeze # :nodoc:
     WINDOWS_ENV = %w[SYSTEMROOT WINDIR SYSTEMDRIVE COMSPEC PATHEXT PATH LOCALAPPDATA TEMP TMP
@@ -218,8 +219,12 @@ module MXC
     end
 
     # Sets the backend: <tt>:auto</tt> (Bubblewrap on Linux, Seatbelt on macOS,
-    # ProcessContainer on Windows), <tt>:bubblewrap</tt>, <tt>:seatbelt</tt>, or
-    # <tt>:process_container</tt>.
+    # ProcessContainer on Windows), <tt>:bubblewrap</tt>, <tt>:landlock</tt>, <tt>:seatbelt</tt>,
+    # or <tt>:process_container</tt>.
+    #
+    # On Linux, <tt>:auto</tt> runs on Landlock when Bubblewrap cannot create its namespaces,
+    # and says so in Result#warnings. <tt>:bubblewrap</tt> never does. <tt>:landlock</tt>
+    # needs Linux 6.2 or newer and runs without network access.
     def with_backend(name)
       @settings[:backend] = name && self.class.backend_name(name)
       self
@@ -279,7 +284,7 @@ module MXC
       return stream(*command, &) if block_given?
 
       outcome = StartupFailure.check!(Native.run(command_line(command), request))
-      Result.new(**outcome, backend: resolved_backend)
+      Result.new(**outcome, backend: resolved_backend(outcome[:warnings]))
     end
 
     # Starts +command+ and returns its Process without waiting for it. Takes the command
@@ -287,7 +292,8 @@ module MXC
     #
     #   sandbox.spawn("python3", "-i", "-q")
     def spawn(*command)
-      Process.new(Native.spawn(command_line(command), request), backend: resolved_backend)
+      native = Native.spawn(command_line(command), request)
+      Process.new(native, backend: resolved_backend(native.warnings))
     end
 
     # Returns true when this host can run this sandbox, including its network policy.
@@ -298,8 +304,10 @@ module MXC
     # Returns the Availability of this sandbox on this host, with the reason and
     # remediation when it cannot run.
     def availability
-      problem = Preflight.problem(network:, denied:, resources:)
-      return MXC.availability(backend:) unless problem
+      problem = Preflight.problem(network:, denied:, resources:, backend:)
+      host = MXC.availability(backend:) unless problem
+      problem ||= Preflight.problem(network:, backend: :landlock) if host&.runs_on == :landlock
+      return host unless problem
 
       Availability.new(backend:, supported: false, reason: problem.message, remediation: problem.remediation)
     end
@@ -404,15 +412,16 @@ module MXC
       arguments.map { |argument| WindowsArguments.quote(argument) }.join(' ')
     end
 
-    def resolved_backend
+    def resolved_backend(warnings)
       return backend unless backend == :auto
       return :process_container if Preflight.windows?
+      return :seatbelt unless Preflight.linux?
 
-      Preflight.linux? ? :bubblewrap : :seatbelt
+      warnings.any?(LANDLOCK_FALLBACK) ? :landlock : :bubblewrap
     end
 
     def request
-      Preflight.check!(network:, denied:, resources:)
+      Preflight.check!(network:, denied:, resources:, backend:)
       {
         readonly: expand(readable),
         readwrite: expand(writable),

@@ -11,6 +11,7 @@ require 'tmpdir'
 module SandboxHelpers
   OUTCOME = { timed_out: false, exit_code: 0, stdout: '', stderr: '', warnings: [], blocked: [] }.freeze
   SETUP_FAILURE = 'Bubblewrap: bwrap could not set up the sandbox and never started the workload'
+  LANDLOCK_FALLBACK = 'Bubblewrap cannot run on this host, so containment "process" runs on Landlock instead.'
 
   def skip_unless_supported
     skip "no sandbox on this host: #{MXC.availability.reason}" unless MXC.supported?

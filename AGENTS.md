@@ -4,7 +4,7 @@ How the `mxc` gem is built. For coding agents first, humans welcome. Read [CONTR
 
 ## What this is
 
-`mxc` is an unofficial Ruby binding to [Microsoft's MXC](https://github.com/microsoft/mxc), a Rust library that runs commands in operating system sandboxes: Bubblewrap on Linux, Seatbelt on macOS, ProcessContainer on Windows. The gem compiles the `mxc-sdk` crate into a native extension with [magnus](https://github.com/matsadler/magnus) and [rb-sys](https://github.com/oxidize-rb/rb-sys), and wraps it in a small Ruby API: `MXC.run`, `MXC.spawn`, `MXC::Sandbox`, and the host checks `MXC.supported?`, `MXC.availability`, `MXC.backends`, and `MXC.supports?`.
+`mxc` is an unofficial Ruby binding to [Microsoft's MXC](https://github.com/microsoft/mxc), a Rust library that runs commands in operating system sandboxes: Bubblewrap on Linux (Landlock where Bubblewrap cannot create its namespaces), Seatbelt on macOS, ProcessContainer on Windows. The gem compiles the `mxc-sdk` crate into a native extension with [magnus](https://github.com/matsadler/magnus) and [rb-sys](https://github.com/oxidize-rb/rb-sys), and wraps it in a small Ruby API: `MXC.run`, `MXC.spawn`, `MXC::Sandbox`, and the host checks `MXC.supported?`, `MXC.availability`, `MXC.backends`, and `MXC.supports?`.
 
 Plain Ruby (>= 3.2) on top, Rust underneath, no runtime dependencies besides `rb_sys`.
 
@@ -25,7 +25,7 @@ Ruby owns the policy and the API; Rust only translates a request Hash into an `m
 ## Public API rules
 
 - **Ruby-native.** Chainable `with_x` setters on `Sandbox` that return `self`, accept `nil` to reset, and have a bare `x` reader and a bare `x` class macro. Keyword arguments on `MXC.run`, `MXC.spawn`, and `Sandbox.new` mirror the setters one to one.
-- **One name per concept.** `readable`, `writable`, `denied`, `network`, `env`, `directory`, `timeout`, `backend`. Do not introduce MXC's own wire names (`readonly_paths`, `timeout_ms`, `containment`) into the Ruby API.
+- **One name per concept.** `readable`, `writable`, `denied`, `network`, `env`, `directory`, `timeout`, `backend`, `runs_on`. Do not introduce MXC's own wire names (`readonly_paths`, `timeout_ms`, `containment`) into the Ruby API.
 - **MXC's enumerations are Symbols** in Ruby: backends (`:bubblewrap`), capabilities (`:proxy_enforcement`), error codes (`:backend_unavailable`), streams (`:stdout`). Strings from the operating system stay Strings.
 - **Value objects, not hashes.** `Result`, `Chunk`, `Backend`, `Availability` have readers named after the concept, predicates ending in `?`, and a one-line `inspect`. `to_h` is for serialization.
 - **Capabilities are one query**, `MXC.supports?(:network_policy)`, never `supports_network_policy?`.
@@ -46,7 +46,7 @@ Keep 0.x minimal: no PTY, no long-lived container lifecycle, no UI policy until 
 
 ## Ground rules
 
-- `mxc-sdk` comes from [crmne/microsoft-mxc](https://github.com/crmne/microsoft-mxc), a fork of MXC 1.0.0 that adds resource limits until MXC ships them (microsoft/mxc#1498), pinned to an exact commit (`rev`). Moving the pin, or back to a crates.io release, is its own commit: re-run the full test suite, `docs/assets/docker/test.sh`, and recheck `StartupFailure`'s patterns and `bwrap-wrapper.sh`, which depend on MXC's Bubblewrap arguments.
+- `mxc-sdk` comes from [crmne/microsoft-mxc](https://github.com/crmne/microsoft-mxc), a fork of MXC 1.0.0 that adds resource limits (microsoft/mxc#1498) and a Landlock backend (microsoft/mxc#1494) until MXC ships them, pinned to an exact commit (`rev`). Moving the pin, or back to a crates.io release, is its own commit: re-run the full test suite, also under `bwrap --dev-bind / / --unshare-user --disable-userns` so `:auto` runs on Landlock, `docs/assets/docker/test.sh`, and recheck the MXC messages the gem reads (`StartupFailure`, `Native::LANDLOCK_REFUSAL`, `Sandbox::LANDLOCK_FALLBACK`) and `bwrap-wrapper.sh`, which depends on MXC's Bubblewrap arguments.
 - Keep diffs small and focused. No drive-by refactors.
 - Plain commit messages: a subject of at most 60 characters, a body wrapped at 72 that says why. No "Generated with" footers, no Co-Authored-By tags.
 - Never push and never post to GitHub on a maintainer's behalf. Commit locally and leave the rest to the maintainer.

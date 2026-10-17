@@ -24,6 +24,7 @@ def sandboxed(command, **options)
 end
 
 check("echo") { sandboxed("echo hi") }
+check("backend") { MXC.run("true", timeout: 20).backend.inspect }
 
 Dir.mktmpdir("mxc-confine", ENV.fetch("PROBE_TMP", Dir.tmpdir)) do |base|
   readable = File.join(base, "readable")

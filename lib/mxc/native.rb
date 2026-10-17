@@ -13,6 +13,9 @@ module MXC
     MISSING_BUBBLEWRAP = /bwrap\) is not installed/
     INSTALL_BUBBLEWRAP = 'Install Bubblewrap 0.5.0 or newer (Debian/Ubuntu: apt-get install bubblewrap; ' \
                          'Fedora: dnf install bubblewrap; Arch: pacman -S bubblewrap)'
+    LANDLOCK_REFUSAL = /\ALandlock: /
+    LANDLOCK_POLICY = 'Change the policy as the message says, or run on Bubblewrap: a sandbox with backend :auto ' \
+                      'runs on Landlock only where Bubblewrap cannot create its namespaces'
 
     def self.backend_attributes
       backends.map { |attributes| attributes.merge(name: BACKEND_NAMES.fetch(attributes[:name], attributes[:name])) }
@@ -21,6 +24,8 @@ module MXC
     def self.error(message, code: nil, remediation: nil, **)
       if message.match?(MISSING_BUBBLEWRAP)
         UnsupportedError.new(message, code: :backend_unavailable, remediation: remediation || INSTALL_BUBBLEWRAP, **)
+      elsif message.match?(LANDLOCK_REFUSAL)
+        UnsupportedError.new(message, code:, remediation: remediation || LANDLOCK_POLICY, **)
       elsif UNSUPPORTED_CODES.include?(code)
         UnsupportedError.new(message, code:, remediation: remediation || StartupFailure.hint(message), **)
       else

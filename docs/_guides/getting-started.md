@@ -31,7 +31,7 @@ sudo dnf install bubblewrap       # Fedora
 sudo pacman -S bubblewrap         # Arch
 ```
 
-Bubblewrap needs unprivileged user namespaces. Most distributions allow them. Ubuntu 23.10 and later restrict them through AppArmor, and containers block them by default; [Running in Docker]({% link _guides/running-in-docker.md %}) covers containers.
+Bubblewrap needs unprivileged user namespaces. Most distributions allow them. Ubuntu 23.10 and later restrict them through AppArmor, and containers block them by default. Where they are blocked, sandboxes run on [Landlock]({% link _guides/policies.md %}#landlock) instead, on Linux 6.2 or newer, without network access. [Running in Docker]({% link _guides/running-in-docker.md %}) covers containers.
 
 Commands that use the network need three more things: `slirp4netns`, `iptables`, and a usable `/dev/net/tun`. Sandboxes without network access do not.
 

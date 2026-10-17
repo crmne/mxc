@@ -4,11 +4,11 @@ nav_order: 5
 description: Configure a Docker container, and a Kamal job role, so it can start MXC sandboxes with the smallest set of relaxed defaults.
 ---
 
-MXC's Linux backend runs each command in a Bubblewrap (`bwrap`) sandbox. Bubblewrap creates an unprivileged user namespace, then pid, ipc, uts, mount and net namespaces inside it. Docker's defaults block this, so a container that runs MXC needs a few targeted changes. This page shows the smallest set we measured, what each change exposes, and how to apply it to only the job worker of a Kamal deployment.
+MXC's Linux backend runs each command in a Bubblewrap (`bwrap`) sandbox. Bubblewrap creates an unprivileged user namespace, then pid, ipc, uts, mount and net namespaces inside it. Docker's defaults block this. A default container still runs sandboxes, on Landlock, but without network access and with the other differences [Policies]({% link _guides/policies.md %}#landlock) lists. To run them on Bubblewrap, a container needs a few targeted changes. This page shows the smallest set we measured, what each change exposes, and how to apply it to only the job worker of a Kamal deployment.
 
 After reading this guide, you will know:
 
-* Why `MXC.run` fails in a default Docker container.
+* What runs in a default Docker container, and why Bubblewrap does not.
 * Which syscalls a custom seccomp profile has to allow, and why `seccomp=unconfined` is not needed.
 * Two ways to deal with Docker's masked `/proc`, and what each one costs.
 * How to keep untrusted code in an MXC sandbox from creating its own user namespaces.
@@ -17,7 +17,20 @@ After reading this guide, you will know:
 
 All results below were measured on Linux 7.2 (x86_64), Docker 29.7.2, the `ruby:4.0-slim` image (Debian 13.7, `bubblewrap` 0.12.0) and mxc-sdk 1.0.0 with the resource limits of [the fork the gem builds on](https://github.com/crmne/microsoft-mxc). AppArmor was not enabled on the test host. [`test.sh`]({{ '/assets/docker/test.sh' | relative_url }}) reproduces every result, using the probe in [`probe.rb`]({{ '/assets/docker/probe.rb' | relative_url }}) and the image in [`Dockerfile.test`]({{ '/assets/docker/Dockerfile.test' | relative_url }}). Run `bundle exec rake compile`, then `docs/assets/docker/test.sh` from a checkout of the gem.
 
-## Why a default container fails
+## A default container runs on Landlock
+
+Without any change, `:auto` runs on Landlock, with a warning in `Result#warnings` that says why Bubblewrap could not:
+
+```
+backend: :landlock
+fs_policy: exit=0 out="wrote\nro-write-blocked" err="/bin/sh: 1: cannot create .../readable/hack: Permission denied"
+python subprocess+multiprocessing: exit=1 err="... PermissionError: [Errno 13] Permission denied"
+limits: cpu_time=1.0 limit=:cpu_time allocation_over_memory_limit=failed
+```
+
+The filesystem policy and the limits hold. Python's `multiprocessing` fails because Landlock gives the sandbox no private `/dev/shm`, and sandboxes have no network. The same happens with `seccomp=unconfined` alone, and with the custom profile below while `/proc` stays masked. If your commands need neither the network nor `/dev/shm`, and the [Landlock differences]({% link _guides/policies.md %}#landlock) are acceptable, you can stop here.
+
+## Why Bubblewrap fails in a default container
 
 Two separate Docker defaults stop Bubblewrap.
 

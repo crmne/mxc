@@ -29,6 +29,12 @@ availability.remediation # => "bwrap cannot mount a fresh /proc because the cont
 
 Probe again after changing the machine with `MXC.availability(refresh: true)`.
 
+`runs_on` says which backend the probe ran on. On Linux it is `:landlock` where Bubblewrap cannot create its namespaces, and those sandboxes have no network:
+
+```ruby
+MXC.availability.runs_on # => :bubblewrap, or :landlock
+```
+
 A sandbox can check its own policy too, including the tools its network setting needs:
 
 ```ruby
@@ -53,7 +59,8 @@ end
 
 ```ruby
 MXC.backends
-# => [#<MXC::Backend name=:bubblewrap tier=nil capabilities=[:proxy_enforcement]>]
+# => [#<MXC::Backend name=:bubblewrap tier=nil capabilities=[:proxy_enforcement]>,
+#     #<MXC::Backend name=:landlock tier=nil capabilities=[]>]
 
 backend = MXC.backends.first
 backend.name         # => :bubblewrap
@@ -81,7 +88,7 @@ MXC.supports?(:memory_limit)     # with_limits(memory: ...) works
 MXC.supports?(:proxy_enforcement)
 ```
 
-* `:network` means `with_network(true)` works.
+* `:network` means `with_network(true)` works. It is `false` where sandboxes run on Landlock.
 * `:network_policy` means `with_network(allow: [...])` works: the network tools are installed and MXC can confine a sandbox to a proxy. It is always `false` on Windows.
 * `:cpu_time_limit`, `:memory_limit`, and `:process_limit` mean the matching [limit]({% link _guides/policies.md %}#limits-and-priority) works, and `:priority` that `with_priority` does.
 * Any other Symbol is checked against the capabilities MXC reports for the backend, such as `:proxy_enforcement`.
@@ -109,7 +116,9 @@ end
 | Situation | Remediation |
 | --- | --- |
 | Bubblewrap is missing | Install the `bubblewrap` package. |
-| User namespaces are blocked | Allow unprivileged user namespaces on the host, or give the container the [seccomp profile]({% link _guides/running-in-docker.md %}#a-custom-seccomp-profile). |
+| User namespaces are blocked, with `backend: :bubblewrap` | Use `:auto` or `:landlock`, allow unprivileged user namespaces on the host, or give the container the [seccomp profile]({% link _guides/running-in-docker.md %}#a-custom-seccomp-profile). |
+| Landlock cannot hold the policy | Use `network: false` and keep `denied` paths outside granted ones, or run where Bubblewrap works. See [Landlock]({% link _guides/policies.md %}#landlock). |
+| Landlock is missing or too old | Use Linux 6.2 or newer with Landlock in the `lsm=` boot parameter. |
 | A container masks `/proc` | See [Handling the masked /proc]({% link _guides/running-in-docker.md %}#handling-the-masked-proc). |
 | Network tools are missing | Install `slirp4netns`, `iptables`, and util-linux. |
 | `/dev/net/tun` is unusable | `modprobe tun` on a host, `--device /dev/net/tun` in Docker. |

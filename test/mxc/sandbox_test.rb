@@ -64,6 +64,7 @@ module MXC
 
     def test_backends_are_symbols_from_a_known_list
       assert_equal :seatbelt, MXC.sandbox.with_backend('seatbelt').backend
+      assert_equal :landlock, MXC.sandbox.with_backend(:landlock).backend
       assert_raises(ArgumentError) { MXC.sandbox.with_backend(:docker) }
     end
 
@@ -235,6 +236,24 @@ module MXC
     def test_run_raises_when_bubblewrap_cannot_start
       MXC::Native.stub(:run, ->(*) { setup_failure("bwrap: Can't mount proc on /newroot/proc\n") }) do
         assert_raises(UnsupportedError) { MXC.run('true') }
+      end
+    end
+
+    def test_results_name_the_backend_that_ran
+      Preflight.stub(:linux?, true) do
+        MXC::Native.stub(:run, ->(*) { outcome(warnings: [LANDLOCK_FALLBACK]) }) do
+          assert_equal :landlock, MXC.run('true').backend
+          assert_equal :landlock, MXC.run('true', backend: :landlock).backend
+        end
+        MXC::Native.stub(:run, ->(*) { outcome }) do
+          assert_equal :bubblewrap, MXC.run('true').backend
+        end
+      end
+    end
+
+    def test_landlock_refuses_network_before_starting_anything
+      MXC::Native.stub(:run, ->(*) { flunk 'ran despite a failed preflight' }) do
+        assert_raises(UnsupportedError) { MXC.run('true', backend: :landlock, network: true) }
       end
     end
 

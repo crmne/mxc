@@ -104,7 +104,7 @@ features:
     link_text: Running commands
   - icon: 💻
     title: Linux, macOS, and Windows
-    details: Bubblewrap, Seatbelt, and Windows process containers behind one API. Precompiled gems, no service to run.
+    details: Bubblewrap or Landlock, Seatbelt, and Windows process containers behind one API. Precompiled gems, no service to run.
     link: /overview/#how-it-works
     link_text: How it works
   - icon: 🩺

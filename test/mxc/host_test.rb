@@ -55,6 +55,30 @@ module MXC
       end
     end
 
+    def test_the_probe_says_when_auto_falls_back_to_landlock
+      Preflight.stub(:linux?, true) do
+        Native.stub(:run, ->(*) { outcome(warnings: [LANDLOCK_FALLBACK]) }) do
+          assert_equal :landlock, Availability.probe(:auto).runs_on
+        end
+        Native.stub(:run, ->(*) { outcome }) do
+          assert_equal :bubblewrap, Availability.probe(:auto).runs_on
+          assert_equal :landlock, Availability.probe(:landlock).runs_on
+        end
+      end
+    end
+
+    def test_sandboxes_on_landlock_have_no_network
+      landlock = Availability.new(backend: :auto, supported: true, runs_on: :landlock)
+      MXC.stub(:supported?, true) do
+        MXC.stub(:availability, landlock) do
+          refute MXC.supports?(:network)
+          refute MXC.supports?(:network_policy)
+          refute_predicate MXC.sandbox.with_network(true).availability, :supported?
+          assert_predicate MXC.sandbox.availability, :supported?
+        end
+      end
+    end
+
     def test_native_errors_make_the_host_unsupported
       Native.stub(:run, ->(*) { raise UnsupportedError.new('no bwrap', remediation: 'install bubblewrap') }) do
         availability = Availability.probe(:auto)
@@ -166,6 +190,16 @@ module MXC
       end
     end
 
+    def test_landlock_has_no_network
+      error = Preflight.problem(network: true, backend: :landlock)
+
+      assert_instance_of UnsupportedError, error
+      assert_match 'Network access', error.message
+      assert_match "host's loopback", error.remediation
+      assert_match 'allow-lists', Preflight.problem(network: { allow: ['pypi.org'] }, backend: :landlock).message
+      assert_nil Preflight.problem(network: false, backend: :landlock, path: '', tun: '/nonexistent')
+    end
+
     def test_passes_when_everything_is_present
       with_tools(Preflight::NETWORK_TOOLS) do |dir, tun|
         assert_nil Preflight.problem(network: true, path: dir, tun:)
@@ -219,6 +253,31 @@ module MXC
       assert_nil StartupFailure.detect(outcome(exit_code: 1, stderr: "bwrap: x\n"))
       assert_nil StartupFailure.detect(outcome(exit_code: 2, stderr: "python: error\n"))
       assert_nil StartupFailure.detect(outcome(timed_out: true, exit_code: nil))
+    end
+  end
+
+  class NativeErrorTest < Minitest::Test
+    def test_landlock_refusals_are_unsupported_with_a_remediation
+      error = Native.error("Landlock: deniedPaths entry '/a/b' lies inside readwritePaths entry '/a'.",
+                           code: :policy_validation)
+
+      assert_instance_of UnsupportedError, error
+      assert_equal :policy_validation, error.code
+      assert_match ':auto', error.remediation
+    end
+
+    def test_blocked_namespaces_point_at_landlock
+      error = Native.error('Bubblewrap (bwrap) cannot create the user, PID, IPC, UTS, and network namespaces ' \
+                           '(bwrap: Creating new namespace failed: nesting depth exceeded)', code: :backend_unavailable)
+
+      assert_instance_of UnsupportedError, error
+      assert_match ':landlock', error.remediation
+    end
+
+    def test_mxc_remediations_win
+      error = Native.error('Landlock: no.', code: :policy_validation, remediation: 'do this')
+
+      assert_equal 'do this', error.remediation
     end
   end
 end

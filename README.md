@@ -22,7 +22,7 @@ result.stdout
 result.success?
 ```
 
-It is an unofficial Ruby binding to [Microsoft's MXC](https://github.com/microsoft/mxc), the MIT-licensed sandbox library. Not affiliated with or endorsed by Microsoft. Resource limits come from [a fork of MXC](https://github.com/crmne/microsoft-mxc) until they are [part of MXC itself](https://github.com/microsoft/mxc/issues/1498).
+It is an unofficial Ruby binding to [Microsoft's MXC](https://github.com/microsoft/mxc), the MIT-licensed sandbox library. Not affiliated with or endorsed by Microsoft. Resource limits and the Landlock backend come from [a fork of MXC](https://github.com/crmne/microsoft-mxc) until they are part of MXC itself ([resource limits](https://github.com/microsoft/mxc/issues/1498), [Landlock](https://github.com/microsoft/mxc/issues/1494)).
 
 ## Installation
 
@@ -35,6 +35,8 @@ Precompiled gems cover Linux (x86_64 and ARM64, glibc and musl), macOS (Intel an
 ```sh
 sudo apt-get install bubblewrap
 ```
+
+Where Bubblewrap cannot create its namespaces, as in a default Docker container or on Ubuntu with AppArmor's restriction, sandboxes run on Landlock instead (Linux 6.2 or newer), without network access.
 
 Commands that use the network also need `slirp4netns`, `iptables`, util-linux, and `/dev/net/tun`. macOS and Windows need nothing extra.
 
@@ -117,15 +119,16 @@ MXC.backends                   # => [#<MXC::Backend name=:bubblewrap ...>]
 
 ## Platforms
 
-| Platform | Backend | 0.2.0 |
+| Platform | Backend | 0.3.0 |
 | --- | --- | --- |
 | Linux | Bubblewrap | Supported and tested, without process limits |
+| Linux 6.2 and later | Landlock, where Bubblewrap cannot run or when asked for | Supported and tested, without network access or process limits |
 | macOS | Seatbelt | Supported and tested, without memory or process limits |
 | Windows 11 24H2 and later | ProcessContainer | Supported and tested, without host allow-lists |
 
 On Windows, a single String runs through `cmd.exe` instead of `sh`. See [Running Commands](https://crmne.github.io/mxc/running-commands/#windows) and [Policies](https://crmne.github.io/mxc/policies/#windows) for what else differs.
 
-Docker blocks the namespaces Bubblewrap needs by default. [Running in Docker](https://crmne.github.io/mxc/running-in-docker/) shows the smallest set of changes that makes it work, with a seccomp profile and a Kamal configuration for a job role.
+Docker blocks the namespaces Bubblewrap needs by default, so a default container runs sandboxes on Landlock. [Running in Docker](https://crmne.github.io/mxc/running-in-docker/) shows what that gives up, and the smallest set of changes that makes Bubblewrap work, with a seccomp profile and a Kamal configuration for a job role.
 
 ## Documentation
 

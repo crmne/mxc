@@ -16,16 +16,27 @@ module MXC
                    'Linux and Windows support it'
     PROCESS_LIMIT = 'Leave processes out of the limits. Only Windows can count the processes of one sandbox; ' \
                     'in a container, limit them with docker run --pids-limit'
+    LANDLOCK_NETWORK = 'Use network: false, or the :bubblewrap backend on a host that allows unprivileged user ' \
+                       'namespaces. Landlock cannot tell one address from another, so it could only allow the ' \
+                       "whole host network, the host's loopback and inbound connections included"
 
     module_function
 
-    def check!(network:, denied: [], resources: nil)
-      error = problem(network:, denied:, resources:)
+    def check!(network:, denied: [], resources: nil, backend: :auto)
+      error = problem(network:, denied:, resources:, backend:)
       raise error if error
     end
 
-    def problem(network:, denied: [], resources: nil, path: ENV.fetch('PATH', ''), tun: TUN)
-      resource_problem(resources) || host_problem(network, denied, path, tun)
+    def problem(network:, denied: [], resources: nil, backend: :auto, path: ENV.fetch('PATH', ''), tun: TUN)
+      resource_problem(resources) || landlock_problem(network, backend) || host_problem(network, denied, path, tun)
+    end
+
+    def landlock_problem(network, backend)
+      return unless network && backend == :landlock
+
+      kind = network.is_a?(Hash) ? 'Host allow-lists are' : 'Network access is'
+      UnsupportedError.new("#{kind} not supported on Landlock", code: :backend_unavailable,
+                                                                remediation: LANDLOCK_NETWORK)
     end
 
     def resource_problem(resources)

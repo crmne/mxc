@@ -100,8 +100,8 @@ fn deny_all() -> NetworkEgressPolicy {
 }
 
 /// A request ready to start: the typed request, or, when it carries resource
-/// limits, which MXC's typed V1 request cannot express yet, the same request
-/// as `1.1.0-alpha` JSON.
+/// limits or names Landlock, which MXC's typed V1 request cannot express yet,
+/// the same request as `1.1.0-alpha` JSON.
 enum Request {
     Typed(Box<ContainerRequest>),
     Json(String),
@@ -114,6 +114,13 @@ impl Request {
             Request::Json(json) => mxc_sdk::__ffi::spawn_container_json(&json, false),
         }
     }
+}
+
+fn landlock(ruby: &Ruby, opts: RHash) -> Result<bool, Error> {
+    Ok(match opt::<Symbol>(ruby, opts, "backend")? {
+        Some(backend) => backend.name()? == "landlock",
+        None => false,
+    })
 }
 
 fn resources(ruby: &Ruby, opts: RHash) -> Result<Option<Value>, Error> {
@@ -143,8 +150,14 @@ fn action(action: Option<NetworkAction>) -> &'static str {
     }
 }
 
-// Mirrors the 1.0.0 document MXC's typed V1 request produces, plus `resources`.
-fn request_json(ruby: &Ruby, req: &ContainerRequest, resources: Value) -> Result<String, Error> {
+// Mirrors the 1.0.0 document MXC's typed V1 request produces, plus `resources`
+// and the `landlock` containment.
+fn request_json(
+    ruby: &Ruby,
+    req: &ContainerRequest,
+    resources: Option<Value>,
+    landlock: bool,
+) -> Result<String, Error> {
     let filesystem = req.filesystem.clone().unwrap_or_default();
     let mut process = json!({
         "commandLine": req.command,
@@ -170,8 +183,10 @@ fn request_json(ruby: &Ruby, req: &ContainerRequest, resources: Value) -> Result
             "readonlyPaths": filesystem.readonly_paths,
             "deniedPaths": filesystem.denied_paths,
         },
-        "resources": resources,
     });
+    if let Some(resources) = resources {
+        document["resources"] = resources;
+    }
     if let Some(network) = &req.network {
         let default = action(network.egress.as_ref().and_then(|egress| egress.default));
         document["network"] = json!({ "egress": { "default": default } });
@@ -184,6 +199,7 @@ fn request_json(ruby: &Ruby, req: &ContainerRequest, resources: Value) -> Result
         }
     }
     document["containment"] = match &req.containment {
+        _ if landlock => "landlock".into(),
         Containment::Process => "process".into(),
         Containment::Bubblewrap => "bubblewrap".into(),
         Containment::Seatbelt(_) => {
@@ -215,9 +231,10 @@ fn prepare(
     opts: RHash,
 ) -> Result<(Request, Option<EgressProxy>), Error> {
     let (req, egress_proxy) = build_request(ruby, command, opts)?;
+    let landlock = landlock(ruby, opts)?;
     let request = match resources(ruby, opts)? {
-        Some(resources) => Request::Json(request_json(ruby, &req, resources)?),
-        None => Request::Typed(Box::new(req)),
+        None if !landlock => Request::Typed(Box::new(req)),
+        resources => Request::Json(request_json(ruby, &req, resources, landlock)?),
     };
     Ok((request, egress_proxy))
 }
@@ -294,6 +311,8 @@ fn build_request(
         req.containment = match backend.name()?.as_ref() {
             "auto" => Containment::Process,
             "bubblewrap" => Containment::Bubblewrap,
+            // The typed request has no Landlock; `request_json` names it.
+            "landlock" => Containment::Process,
             "seatbelt" => Containment::Seatbelt(SeatbeltConfig::default()),
             "process_container" => {
                 Containment::ProcessContainer(ProcessContainerConfig::default())
@@ -474,6 +493,13 @@ impl Process {
         self.pid
     }
 
+    fn warnings(&self) -> Vec<String> {
+        match self.child.lock().unwrap().as_ref() {
+            Some(child) => child.warnings(),
+            None => Vec::new(),
+        }
+    }
+
     // A reader blocked in `read` holds its stream's lock, and one that reached
     // the end leaves `None`.
     fn drained(&self) -> bool {
@@ -583,6 +609,7 @@ fn init(ruby: &Ruby) -> Result<(), Error> {
     native.define_singleton_method("spawn", function!(spawn, 2))?;
     let process = native.define_class("Process", ruby.class_object())?;
     process.define_method("pid", method!(Process::pid, 0))?;
+    process.define_method("warnings", method!(Process::warnings, 0))?;
     process.define_method("read_stdout", method!(Process::read_stdout, 1))?;
     process.define_method("read_stderr", method!(Process::read_stderr, 1))?;
     process.define_method("write", method!(Process::write, 1))?;

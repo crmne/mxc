@@ -15,7 +15,8 @@ module MXC
       @timeout = nil
     end
 
-    # Sets the default backend: <tt>:auto</tt>, <tt>:bubblewrap</tt>, or <tt>:seatbelt</tt>.
+    # Sets the default backend: <tt>:auto</tt>, <tt>:bubblewrap</tt>, <tt>:landlock</tt>,
+    # <tt>:seatbelt</tt>, or <tt>:process_container</tt>.
     def backend=(name)
       @backend = Sandbox.backend_name(name)
     end

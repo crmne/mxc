@@ -7,7 +7,8 @@ module MXC
                               /setting up uid map/i, /unshare.*Operation not permitted/i)
     PROC = /Can't mount proc|mount proc on/i
     HOST_PROBLEMS = {
-      NAMESPACES => 'Unprivileged user namespaces are blocked. On a host, enable kernel.unprivileged_userns_clone=1 ' \
+      NAMESPACES => 'Unprivileged user namespaces are blocked. Use backend :auto or :landlock to run on Landlock ' \
+                    'instead, or allow them for Bubblewrap: on a host, enable kernel.unprivileged_userns_clone=1 ' \
                     'and, on Ubuntu 23.10 and later, allow bwrap in AppArmor ' \
                     '(kernel.apparmor_restrict_unprivileged_userns). ' \
                     "In Docker, run with a seccomp profile that allows namespaces: #{DOCKER_GUIDE}",

@@ -73,7 +73,7 @@ result.stdout     # => "built 3 files\n"
 result.stderr     # => ""
 result.warnings   # => [] (MXC's notes about the sandbox)
 result.blocked    # => [] (hosts the network allow-list refused)
-result.backend    # => :bubblewrap
+result.backend    # => :bubblewrap, or :landlock where Bubblewrap cannot run
 ```
 
 A sandbox with [limits or a priority]({% link _guides/policies.md %}#limits-and-priority) also reports what the command used:

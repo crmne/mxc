@@ -87,7 +87,8 @@ module MXC
       Native.backend_attributes.map { |attributes| Backend.new(**attributes) }
     end
 
-    # Returns true when this host supports +capability+ with the configured backend.
+    # Returns true when this host supports +capability+ with the configured backend. Where
+    # sandboxes run on Landlock, there is no <tt>:network</tt> or <tt>:network_policy</tt>.
     #
     # +capability+ is <tt>:network</tt> for unrestricted network access,
     # <tt>:network_policy</tt> for host allow-lists, <tt>:cpu_time_limit</tt>,
@@ -100,14 +101,18 @@ module MXC
       return false unless supported?
 
       case capability
-      when :network then Preflight.problem(network: true).nil?
-      when :network_policy then Preflight.problem(network: { allow: [] }).nil? && proxy_enforcement?
+      when :network then Preflight.problem(network: true, backend: runs_on).nil?
+      when :network_policy then Preflight.problem(network: { allow: [] }, backend: runs_on).nil? && proxy_enforcement?
       when *RESOURCE_CAPABILITIES.keys then Preflight.resource_problem(RESOURCE_CAPABILITIES[capability]).nil?
       else configured_backends.any? { |backend| backend.supports?(capability) }
       end
     end
 
     private
+
+    def runs_on
+      availability.runs_on
+    end
 
     def proxy_enforcement?
       !Preflight.linux? || configured_backends.any? { |backend| backend.supports?(:proxy_enforcement) }

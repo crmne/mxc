@@ -187,12 +187,28 @@ Neither platform can count the processes of one sandbox, so `processes` raises `
 
 `backend` picks the sandbox technology:
 
-* `:auto`, the default, uses Bubblewrap on Linux, Seatbelt on macOS, and ProcessContainer on Windows.
-* `:bubblewrap`, `:seatbelt`, and `:process_container` ask for one explicitly, and raise `MXC::UnsupportedError` where it does not exist.
+* `:auto`, the default, uses Bubblewrap on Linux, Seatbelt on macOS, and ProcessContainer on Windows. On Linux, it uses Landlock where Bubblewrap cannot create its namespaces.
+* `:bubblewrap`, `:landlock`, `:seatbelt`, and `:process_container` ask for one explicitly, and raise `MXC::UnsupportedError` where it cannot run. `:bubblewrap` never falls back.
 
 ```ruby
 MXC.configure { |config| config.backend = :bubblewrap }
 ```
+
+`Result#backend` names the backend that ran the command, and a run that fell back to Landlock says why in `Result#warnings`.
+
+### Landlock
+
+[Landlock](https://docs.kernel.org/userspace-api/landlock.html) confines a process without namespaces, privileges, or helper programs, so it works where Bubblewrap cannot: in a default Docker container, on Ubuntu 23.10 and later with AppArmor's restriction on, and on hosts with `user.max_user_namespaces` at 0. It needs Linux 6.2 or newer with Landlock enabled. `MXC.backends` lists it, with a warning for each protection this kernel's Landlock lacks.
+
+The same policy is enforced differently, and some of it is refused rather than weakened:
+
+* **No network.** Landlock cannot tell one address from another, so it could only allow the whole host network, including your machine's loopback and inbound connections. The gem does not offer that: `network: true` and `allow:` raise `MXC::UnsupportedError`, and `MXC.supports?(:network)` is `false` where sandboxes run on Landlock. Without network, the command cannot create network sockets at all.
+* **Denied paths only outside grants.** Landlock grants whole directory trees and cannot take part of one back, so a `denied` path inside a `readable` or `writable` one raises `MXC::UnsupportedError`. Grant the paths beside it instead.
+* **The host's filesystem layout.** The command sees the real `/tmp` and `/dev` rather than private ones, with access only to what the policy grants, plus a private `TMPDIR`. There is no private `/dev/shm`, so POSIX semaphores, and with them Python's `multiprocessing` locks, fail with `Permission denied`.
+* **Metadata outside the policy.** Landlock decides who may read, write, and run files, not who may change their metadata. A command can change the permissions and timestamps of any file your user owns, even one it cannot read, and can see whether a path exists. It cannot read or change the contents.
+* **A directory it cannot read** is still where the command starts, as on Seatbelt. Bubblewrap refuses to start there.
+
+CPU time and memory limits and priorities work as on Bubblewrap. The command runs as a child of your process rather than in a PID namespace of its own, and MXC stops everything it leaves running when it exits or times out.
 
 ## Windows
 

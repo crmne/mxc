@@ -53,6 +53,7 @@ module MXC
     end
 
     def test_denied_paths_stay_hidden_inside_readable_ones
+      skip 'Landlock refuses denied paths inside granted ones' if MXC.availability.runs_on == :landlock
       result = MXC.run("cat #{@readable}/input.txt", readable: @dir, denied: @readable)
 
       refute_predicate result, :success?
@@ -65,7 +66,8 @@ module MXC
     end
 
     def test_a_directory_outside_the_sandbox_raises
-      skip 'Seatbelt starts commands in directories they cannot read' unless Preflight.linux?
+      skip 'Seatbelt and Landlock start commands in directories they cannot read' unless
+        MXC.availability.runs_on == :bubblewrap
 
       error = assert_raises(Error) { MXC.run('pwd', directory: @readable) }
 
@@ -73,7 +75,7 @@ module MXC
     end
 
     def test_a_directory_outside_the_sandbox_stays_unreadable
-      skip 'Bubblewrap refuses to start in a directory it cannot see' if Preflight.linux?
+      skip 'Bubblewrap refuses to start in a directory it cannot see' if MXC.availability.runs_on == :bubblewrap
 
       result = MXC.run('pwd; cat input.txt', directory: @readable)
 
