@@ -10,6 +10,7 @@ require 'tmpdir'
 
 module SandboxHelpers
   OUTCOME = { timed_out: false, exit_code: 0, stdout: '', stderr: '', warnings: [], blocked: [] }.freeze
+  SETUP_FAILURE = 'Bubblewrap: bwrap could not set up the sandbox and never started the workload'
 
   def skip_unless_supported
     skip "no sandbox on this host: #{MXC.availability.reason}" unless MXC.supported?
@@ -23,6 +24,10 @@ module SandboxHelpers
 
   def outcome(**overrides)
     OUTCOME.merge(overrides)
+  end
+
+  def setup_failure(stderr)
+    outcome(exit_code: nil, failure: SETUP_FAILURE, stderr:)
   end
 
   def capture_request(sandbox, *command)

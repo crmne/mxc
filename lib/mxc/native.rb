@@ -21,8 +21,10 @@ module MXC
     def self.error(message, code: nil, remediation: nil, **)
       if message.match?(MISSING_BUBBLEWRAP)
         UnsupportedError.new(message, code: :backend_unavailable, remediation: remediation || INSTALL_BUBBLEWRAP, **)
+      elsif UNSUPPORTED_CODES.include?(code)
+        UnsupportedError.new(message, code:, remediation: remediation || StartupFailure.hint(message), **)
       else
-        (UNSUPPORTED_CODES.include?(code) ? UnsupportedError : Error).new(message, code:, remediation:, **)
+        Error.new(message, code:, remediation:, **)
       end
     end
   end

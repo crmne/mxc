@@ -15,21 +15,25 @@ module MXC
               "In Docker, see #{DOCKER_GUIDE}"
     }.freeze
     CHDIR = /Can't chdir/i
+    BWRAP_LINE = /^bwrap: .*$/
 
     module_function
 
     def detect(outcome)
-      return unless outcome[:exit_code] == 1 && outcome[:stdout].to_s.empty?
+      failure = outcome[:failure] or return
+      reason = outcome[:stderr].to_s.scan(BWRAP_LINE).last
+      return Error.new(failure, code: :backend_error) unless reason
 
-      stderr = outcome[:stderr].to_s
-      return unless stderr.match?(/\Abwrap: [^\n]*\n?\z/)
-
-      message = "Bubblewrap could not start the sandbox: #{stderr.strip}"
-      _, hint = HOST_PROBLEMS.find { |pattern, _| stderr.match?(pattern) }
+      message = "Bubblewrap could not start the sandbox: #{reason}"
+      hint = hint(reason)
       return UnsupportedError.new(message, code: :backend_unavailable, remediation: hint, operation: 'bwrap') if hint
 
-      remediation = 'Make the directory readable or writable in the sandbox' if stderr.match?(CHDIR)
+      remediation = 'Make the directory readable or writable in the sandbox' if reason.match?(CHDIR)
       Error.new(message, code: :backend_error, remediation:, operation: 'bwrap')
+    end
+
+    def hint(message)
+      HOST_PROBLEMS.find { |pattern, _| message.match?(pattern) }&.last
     end
 
     def check!(outcome)

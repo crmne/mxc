@@ -6,8 +6,8 @@ endorsed by Microsoft.
 
 The native extension compiles and links the mxc-sdk crate
 (https://github.com/microsoft/mxc, https://crates.io/crates/mxc-sdk), from
-a fork at https://github.com/crmne/microsoft-mxc that adds resource limits,
-which is distributed under the MIT License:
+a fork at https://github.com/crmne/microsoft-mxc that adds resource limits
+and a Landlock backend, which is distributed under the MIT License:
 
 MIT License
 

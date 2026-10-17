@@ -45,7 +45,7 @@ module MXC
 
     def test_a_failed_sandbox_start_is_unsupported_with_a_remediation
       Native.stub(:run, lambda { |*|
-        outcome(exit_code: 1, stderr: "bwrap: Can't mount proc on /newroot/proc: Operation not permitted\n")
+        setup_failure("bwrap: Can't mount proc on /newroot/proc: Operation not permitted\n")
       }) do
         availability = Availability.probe(:auto)
 
@@ -174,8 +174,8 @@ module MXC
   end
 
   class StartupFailureTest < Minitest::Test
-    def failure(stderr, exit_code: 1, stdout: '')
-      StartupFailure.detect(outcome(exit_code:, stdout:, stderr:))
+    def failure(stderr)
+      StartupFailure.detect(setup_failure(stderr))
     end
 
     def test_namespace_denial_is_unsupported_with_a_docker_hint
@@ -200,11 +200,24 @@ module MXC
       assert_match 'readable', error.remediation
     end
 
+    def test_reads_the_last_line_bwrap_printed
+      error = failure("warming up\nbwrap: Can't chdir to /nowhere: No such file or directory\n")
+
+      assert_equal "Bubblewrap could not start the sandbox: bwrap: Can't chdir to /nowhere: No such file or directory",
+                   error.message
+    end
+
+    def test_a_failure_without_a_bwrap_message_keeps_mxcs
+      error = failure('')
+
+      assert_instance_of Error, error
+      assert_equal :backend_error, error.code
+      assert_equal SETUP_FAILURE, error.message
+    end
+
     def test_ordinary_failures_stay_results
-      assert_nil failure("bwrap: x\n", exit_code: 2)
-      assert_nil failure("bwrap: x\n", stdout: 'output')
-      assert_nil failure("bwrap: x\nmore\n")
-      assert_nil failure("python: error\n")
+      assert_nil StartupFailure.detect(outcome(exit_code: 1, stderr: "bwrap: x\n"))
+      assert_nil StartupFailure.detect(outcome(exit_code: 2, stderr: "python: error\n"))
       assert_nil StartupFailure.detect(outcome(timed_out: true, exit_code: nil))
     end
   end

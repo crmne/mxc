@@ -20,6 +20,16 @@ mod proxy;
 use proxy::{Allowlist, EgressProxy};
 
 const MAX_POLL: Duration = Duration::from_millis(50);
+/// How long a sandbox that failed may keep its output streams open before
+/// they are closed. Nothing it started runs on, so they end at once.
+const DRAIN: Duration = Duration::from_secs(1);
+
+fn drain_until(drained: impl Fn() -> bool) {
+    let deadline = Instant::now() + DRAIN;
+    while !drained() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
 
 fn without_gvl<F, R>(f: F) -> R
 where
@@ -98,13 +108,6 @@ enum Request {
 }
 
 impl Request {
-    fn run(self) -> Result<v1::ExecutionResult, v1::Error> {
-        match self {
-            Request::Typed(req) => v1::run(*req, Default::default()),
-            Request::Json(json) => mxc_sdk::__ffi::run_json(&json, false),
-        }
-    }
-
     fn spawn(self) -> Result<MxcProcess, v1::Error> {
         match self {
             Request::Typed(req) => v1::spawn(*req, Default::default()),
@@ -301,19 +304,62 @@ fn build_request(
     Ok((req, egress_proxy))
 }
 
-fn outcome_hash(ruby: &Ruby, outcome: WaitResult) -> Result<RHash, Error> {
+// A wait that fails, such as for a sandbox that never started the command,
+// is reported as `failure` rather than raised, so Ruby reads it alongside
+// what the sandbox printed.
+fn outcome_hash(ruby: &Ruby, outcome: std::io::Result<WaitResult>) -> Result<RHash, Error> {
     let h = ruby.hash_new();
-    match outcome {
-        WaitResult::Exited(code) => {
-            h.aset(ruby.to_symbol("timed_out"), false)?;
-            h.aset(ruby.to_symbol("exit_code"), code)?;
+    let (timed_out, exit_code) = match outcome {
+        Ok(WaitResult::Exited(code)) => (false, Some(code)),
+        Ok(WaitResult::TimedOut) => (true, None),
+        Err(e) => {
+            h.aset(ruby.to_symbol("failure"), e.to_string())?;
+            (false, None)
         }
-        WaitResult::TimedOut => {
-            h.aset(ruby.to_symbol("timed_out"), true)?;
-            h.aset(ruby.to_symbol("exit_code"), ruby.qnil())?;
+    };
+    h.aset(ruby.to_symbol("timed_out"), timed_out)?;
+    h.aset(ruby.to_symbol("exit_code"), exit_code)?;
+    Ok(h)
+}
+
+type Outcome = (std::io::Result<WaitResult>, Vec<String>, Option<ExecutionMetadata>);
+type Drain = std::thread::JoinHandle<std::io::Result<Vec<u8>>>;
+
+fn drain(stream: Option<Box<dyn Read + Send>>) -> Drain {
+    std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        if let Some(mut stream) = stream {
+            stream.read_to_end(&mut buf)?;
+        }
+        Ok(buf)
+    })
+}
+
+fn drained(handle: Drain) -> std::io::Result<Vec<u8>> {
+    handle
+        .join()
+        .unwrap_or_else(|_| Err(std::io::Error::other("output capture thread panicked")))
+}
+
+// MXC's `wait_with_output`, except that a failed wait keeps the output: when
+// Bubblewrap cannot set a sandbox up, its reason is on stderr.
+fn capture(mut child: MxcProcess) -> std::io::Result<(Outcome, Vec<u8>, Vec<u8>)> {
+    let closers = [child.stdout_closer(), child.stderr_closer()];
+    let stdout = drain(child.take_stdout());
+    let stderr = drain(child.take_stderr());
+    let outcome = child.wait();
+    let warnings = child.warnings();
+    let metadata = child.output_metadata().cloned();
+    drop(child);
+    if outcome.is_err() {
+        drain_until(|| stdout.is_finished() && stderr.is_finished());
+    }
+    if !matches!(outcome, Ok(WaitResult::Exited(_))) {
+        for closer in closers.iter().flatten() {
+            closer.close();
         }
     }
-    Ok(h)
+    Ok(((outcome, warnings, metadata), drained(stdout)?, drained(stderr)?))
 }
 
 fn snake_case(name: &str) -> String {
@@ -351,18 +397,20 @@ fn backends(ruby: &Ruby) -> Result<RArray, Error> {
 
 fn run(ruby: &Ruby, command: String, opts: RHash) -> Result<RHash, Error> {
     let (req, mut egress_proxy) = prepare(ruby, command, opts)?;
-    let result = without_gvl(move || req.run());
+    let result = without_gvl(move || req.spawn().map(capture));
     let blocked = egress_proxy.as_mut().map(|p| {
         p.stop();
         p.blocked()
     });
-    let r = result.map_err(|e| mxc_error(ruby, e))?;
-    let h = outcome_hash(ruby, r.outcome)?;
-    h.aset(ruby.to_symbol("stdout"), ruby.str_from_slice(&r.stdout))?;
-    h.aset(ruby.to_symbol("stderr"), ruby.str_from_slice(&r.stderr))?;
-    h.aset(ruby.to_symbol("warnings"), r.warnings)?;
+    let ((outcome, warnings, metadata), stdout, stderr) = result
+        .map_err(|e| mxc_error(ruby, e))?
+        .map_err(|e| io_error(ruby, e))?;
+    let h = outcome_hash(ruby, outcome)?;
+    h.aset(ruby.to_symbol("stdout"), ruby.str_from_slice(&stdout))?;
+    h.aset(ruby.to_symbol("stderr"), ruby.str_from_slice(&stderr))?;
+    h.aset(ruby.to_symbol("warnings"), warnings)?;
     h.aset(ruby.to_symbol("blocked"), blocked.unwrap_or_default())?;
-    usage_into(ruby, h, r.output_metadata.as_ref())?;
+    usage_into(ruby, h, metadata.as_ref())?;
     Ok(h)
 }
 
@@ -426,6 +474,14 @@ impl Process {
         self.pid
     }
 
+    // A reader blocked in `read` holds its stream's lock, and one that reached
+    // the end leaves `None`.
+    fn drained(&self) -> bool {
+        [&self.stdout, &self.stderr]
+            .iter()
+            .all(|stream| matches!(stream.try_lock(), Ok(guard) if guard.is_none()))
+    }
+
     fn read_stdout(ruby: &Ruby, rb_self: &Self, max: usize) -> Result<Option<RString>, Error> {
         read_from(ruby, &rb_self.stdout, max)
     }
@@ -463,7 +519,7 @@ impl Process {
 
     // MxcProcess::kill and ::wait both need the handle exclusively, so waiting
     // polls and releases the lock between polls to let kill in.
-    fn await_exit(&self) -> std::io::Result<(WaitResult, Vec<String>, Option<ExecutionMetadata>)> {
+    fn await_exit(&self) -> std::io::Result<Outcome> {
         let mut nap = Duration::from_millis(1);
         loop {
             {
@@ -472,8 +528,8 @@ impl Process {
                     .as_mut()
                     .ok_or_else(|| std::io::Error::other("the process was already waited for"))?;
                 let expired = self.deadline.is_some_and(|d| Instant::now() >= d);
-                if expired || child.try_wait()?.is_some() {
-                    let outcome = child.wait()?;
+                if expired || !matches!(child.try_wait(), Ok(None)) {
+                    let outcome = child.wait();
                     let warnings = child.warnings();
                     let metadata = child.output_metadata().cloned();
                     guard.take();
@@ -499,7 +555,10 @@ impl Process {
             None => Vec::new(),
         };
         let (outcome, warnings, metadata) = res.map_err(|e| io_error(ruby, e))?;
-        if !matches!(outcome, WaitResult::Exited(_)) {
+        if outcome.is_err() {
+            without_gvl(|| drain_until(|| rb_self.drained()));
+        }
+        if !matches!(outcome, Ok(WaitResult::Exited(_))) {
             if let Some(c) = &rb_self.stdout_closer {
                 c.close();
             }

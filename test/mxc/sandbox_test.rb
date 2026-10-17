@@ -233,7 +233,7 @@ module MXC
     end
 
     def test_run_raises_when_bubblewrap_cannot_start
-      MXC::Native.stub(:run, ->(*) { outcome(exit_code: 1, stderr: "bwrap: Can't mount proc on /newroot/proc\n") }) do
+      MXC::Native.stub(:run, ->(*) { setup_failure("bwrap: Can't mount proc on /newroot/proc\n") }) do
         assert_raises(UnsupportedError) { MXC.run('true') }
       end
     end
