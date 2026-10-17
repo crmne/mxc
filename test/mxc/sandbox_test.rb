@@ -240,7 +240,7 @@ module MXC
     end
 
     def test_results_name_the_backend_that_ran
-      Preflight.stub(:linux?, true) do
+      on_linux do
         MXC::Native.stub(:run, ->(*) { outcome(warnings: [LANDLOCK_FALLBACK]) }) do
           assert_equal :landlock, MXC.run('true').backend
           assert_equal :landlock, MXC.run('true', backend: :landlock).backend

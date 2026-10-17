@@ -56,7 +56,7 @@ module MXC
     end
 
     def test_the_probe_says_when_auto_falls_back_to_landlock
-      Preflight.stub(:linux?, true) do
+      on_linux do
         Native.stub(:run, ->(*) { outcome(warnings: [LANDLOCK_FALLBACK]) }) do
           assert_equal :landlock, Availability.probe(:auto).runs_on
         end

@@ -27,6 +27,10 @@ module SandboxHelpers
     OUTCOME.merge(overrides)
   end
 
+  def on_linux(&)
+    MXC::Preflight.stub(:windows?, false) { MXC::Preflight.stub(:linux?, true, &) }
+  end
+
   def setup_failure(stderr)
     outcome(exit_code: nil, failure: SETUP_FAILURE, stderr:)
   end
