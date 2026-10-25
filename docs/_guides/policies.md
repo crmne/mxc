@@ -49,7 +49,7 @@ Anything else the command writes is either refused or thrown away when the sandb
 
 ### Shared libraries on macOS
 
-A program built against libraries outside the system, such as a Ruby that links Homebrew's GMP, would not start in a sandbox that cannot read them. On macOS, the sandbox reads the directories of the libraries the command's program links, and of the libraries those link in turn. Only those directories become readable, never the whole Homebrew prefix. The program is the first argument, or the first word of a command for the shell, found on the `PATH` you set with `env`.
+A program built against libraries outside the system, such as a Ruby that links Homebrew's GMP, would not start in a sandbox that cannot read them. On macOS, the sandbox reads the library files the command's program links, and those they link in turn. Only those files become readable: not their directories, and never the whole Homebrew prefix. The program is the first argument, or the first word of a command for the shell, found on the `PATH` you set with `env`.
 
 A program can also open libraries while it runs, like the extensions Ruby and Python load on `require` and `import`. Name them with `libraries_of`, and the sandbox reads the libraries they link:
 
@@ -63,6 +63,18 @@ MXC.sandbox
 ```
 
 MXC lists the libraries with `otool` from the Command Line Tools. On a Mac without them, and on Linux and Windows, where the sandbox already reads the system's libraries, neither grants anything.
+
+To grant no library at all, so the command reads only the system's and what `readable` lists, turn them off:
+
+```ruby
+MXC.sandbox.with_libraries(false)
+
+class StrictSandbox < MXC::Sandbox
+  libraries false
+end
+```
+
+`inspect` shows `libraries=false` when they are off, and the `libraries_of` you named.
 
 ## Network
 

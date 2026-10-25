@@ -30,7 +30,7 @@ module MXC
   class Sandbox
     BACKENDS = %i[auto bubblewrap landlock seatbelt process_container].freeze # :nodoc:
     LANDLOCK_FALLBACK = /runs on Landlock instead/ # :nodoc:
-    OPTIONS = %i[readable writable denied libraries_of network env directory timeout backend limits
+    OPTIONS = %i[readable writable denied libraries libraries_of network env directory timeout backend limits
                  priority].freeze # :nodoc:
     HOST_RESOLVER_SOCKETS = %w[/run/systemd/resolve].freeze # :nodoc:
     WINDOWS_ENV = %w[SYSTEMROOT WINDIR SYSTEMDRIVE COMSPEC PATHEXT PATH LOCALAPPDATA TEMP TMP
@@ -41,8 +41,8 @@ module MXC
     PRIORITIES = { normal: nil, low: 'low', lowest: 'idle' }.freeze # :nodoc:
     MEGABYTE = 1024 * 1024 # :nodoc:
     DEFAULTS = {
-      readable: [], writable: [], denied: [], libraries_of: [], env: {}, network: false, directory: nil, timeout: nil,
-      backend: nil, limits: {}, priority: nil
+      readable: [], writable: [], denied: [], libraries: true, libraries_of: [], env: {}, network: false,
+      directory: nil, timeout: nil, backend: nil, limits: {}, priority: nil
     }.freeze # :nodoc:
 
     class << self
@@ -58,6 +58,9 @@ module MXC
       # Adds programs and libraries whose shared libraries every instance can load.
       # Takes the same arguments as #with_libraries_of.
       def libraries_of(*paths) = configure { |sandbox| sandbox.with_libraries_of(*paths) }
+
+      # Sets whether every instance can read the libraries its programs load. See #with_libraries.
+      def libraries(enabled) = configure { |sandbox| sandbox.with_libraries(enabled) }
 
       # Sets every instance's network access. Takes the same arguments as #with_network.
       def network(...) = configure { |sandbox| sandbox.with_network(...) }
@@ -143,6 +146,9 @@ module MXC
     # Returns the programs and libraries whose shared libraries the command can load, as given.
     def libraries_of = @settings[:libraries_of].dup.freeze
 
+    # Returns true when the command can read the libraries its program loads, the default.
+    def libraries = @settings[:libraries]
+
     # Returns the environment variables set for the command.
     def env = @settings[:env].dup.freeze
 
@@ -182,14 +188,29 @@ module MXC
     end
 
     # Adds programs and libraries whose shared libraries the command loads, such as the
-    # extensions an interpreter opens. On macOS, the command can read the directories of
-    # those libraries, and of the libraries they load in turn, when they are not the
-    # system's own. The program the command runs needs no entry: #run grants its libraries
-    # already. Elsewhere, and on a Mac without the Command Line Tools, this grants nothing.
+    # extensions an interpreter opens. On macOS, the command can read those library files,
+    # and the libraries they load in turn, when they are not the system's own. The program
+    # the command runs needs no entry: #run grants its libraries already. Elsewhere, on a
+    # Mac without the Command Line Tools, and with <tt>with_libraries(false)</tt>, this
+    # grants nothing.
     #
     #   sandbox.with_libraries_of(*Dir[File.join(RbConfig::CONFIG["archdir"], "**", "*.bundle")])
     def with_libraries_of(*paths)
       add_paths(:libraries_of, paths)
+    end
+
+    # Sets whether the command can read the shared libraries its program and #libraries_of
+    # load, on macOS. +true+ is the default; +false+ grants no library, so the command reads
+    # only the system's and those under #readable. +nil+ resets it to +true+.
+    #
+    #   sandbox.with_libraries(false)
+    def with_libraries(enabled)
+      unless [true, false, nil].include?(enabled)
+        raise ArgumentError, "libraries must be true, false or nil, got #{enabled.inspect}"
+      end
+
+      @settings[:libraries] = enabled != false
+      self
     end
 
     # Sets network access. The default, +false+, gives the command no network at all.
@@ -292,10 +313,11 @@ module MXC
     #
     # With a block, yields each Chunk of output as it arrives.
     #
-    # On macOS, the command can read the shared libraries its program links outside the
-    # system's own, such as Homebrew's, so programs built against them start. The program
-    # is the first argument, or the first word of a command for the shell, found on the
-    # +PATH+ of #env. See #with_libraries_of for libraries the program opens later.
+    # On macOS, the command can read the shared library files its program links outside
+    # the system's own, such as Homebrew's, so programs built against them start. The
+    # program is the first argument, or the first word of a command for the shell, found
+    # on the +PATH+ of #env. See #with_libraries_of for libraries the program opens later,
+    # and #with_libraries to turn this off.
     #
     #   sandbox.run("python3 build.py && ls dist")
     #   sandbox.run("python3", "convert.py", params[:filename])
@@ -341,7 +363,8 @@ module MXC
     def inspect # :nodoc:
       resources = " limits=#{limits.inspect} priority=#{priority.inspect}" if self.resources
       "#<#{self.class.name || 'MXC::Sandbox'} backend=#{backend.inspect} network=#{network.inspect} " \
-        "readable=#{readable.inspect} writable=#{writable.inspect} timeout=#{timeout.inspect}#{resources}>"
+        "readable=#{readable.inspect} writable=#{writable.inspect} timeout=#{timeout.inspect}#{resources}" \
+        "#{libraries_inspect}>"
     end
 
     protected
@@ -448,7 +471,7 @@ module MXC
     def request(arguments)
       Preflight.check!(network:, denied:, resources:, backend:)
       {
-        readonly: expand(readable) | library_directories(arguments),
+        readonly: expand(readable) | library_files(arguments),
         readwrite: expand(writable),
         denied: expand(denied) | hidden_resolver_sockets,
         environment:,
@@ -499,26 +522,15 @@ module MXC
       system.reject { |name, _| env.keys.any? { |own| own.casecmp?(name) } }.merge(env)
     end
 
-    def library_directories(arguments)
-      return [] unless Libraries.available?
-
-      program = program_path(arguments)
-      Libraries.directories([*program, *expand(libraries_of)], executable: program)
+    def libraries_inspect
+      libraries ? (" libraries_of=#{libraries_of.inspect}" if libraries_of.any?) : ' libraries=false'
     end
 
-    def program_path(arguments)
-      name = program_name(arguments)
-      return if name.nil?
-      return File.expand_path(name, working_directory || '/') if name.include?('/')
+    def library_files(arguments)
+      return [] unless libraries && Libraries.available?
 
-      env['PATH'].to_s.split(File::PATH_SEPARATOR).map { |directory| File.join(directory, name) }
-                 .find { |path| File.file?(path) && File.executable?(path) }
-    end
-
-    def program_name(arguments)
-      arguments.one? ? Shellwords.split(arguments.first).first : arguments.first
-    rescue ArgumentError
-      nil
+      program = Libraries.program(arguments, path: env['PATH'], directory: working_directory)
+      Libraries.files([*program, *expand(libraries_of)], executable: program)
     end
 
     def hidden_resolver_sockets

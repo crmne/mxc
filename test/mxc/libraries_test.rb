@@ -15,7 +15,7 @@ module MXC
       super
     end
 
-    def test_finds_the_real_directories_of_libraries_and_their_own_libraries
+    def test_finds_the_real_files_of_libraries_and_their_own_libraries
       program = file('bin/tool')
       one = file('Cellar/one/1.0/lib/libone.dylib')
       two = file('Cellar/one/1.0/lib/libtwo.dylib')
@@ -31,10 +31,9 @@ module MXC
         three => { libraries: ['/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation'] }
       }
 
-      directories = with_otool(load_commands) { Libraries.directories([program]) }
+      files = with_otool(load_commands) { Libraries.files([program]) }
 
-      assert_equal [File.join(@root, 'Cellar/one/1.0/lib'), File.join(@root, 'Cellar/three/2.0/lib')],
-                   directories
+      assert_equal [one, two, three], files
     end
 
     def test_reads_every_architecture_of_a_universal_binary
@@ -43,11 +42,11 @@ module MXC
       output = "#{program} (architecture x86_64):\n#{commands(libraries: [library])}" \
                "#{program} (architecture arm64):\n#{commands(libraries: [library])}#{library}:\n"
 
-      directories = Libraries.stub(:available?, true) do
-        Libraries.stub(:otool, output) { Libraries.directories([program]) }
+      files = Libraries.stub(:available?, true) do
+        Libraries.stub(:otool, output) { Libraries.files([program]) }
       end
 
-      assert_equal [File.dirname(library)], directories
+      assert_equal [library], files
     end
 
     def test_resolves_executable_paths_against_the_program_that_loads_them
@@ -56,19 +55,19 @@ module MXC
       library = file('bin/libs/libyaml.dylib')
       load_commands = { extension => { libraries: ['@executable_path/libs/libyaml.dylib'] }, program => {} }
 
-      directories = with_otool(load_commands) { Libraries.directories([extension], executable: program) }
+      files = with_otool(load_commands) { Libraries.files([extension], executable: program) }
 
-      assert_equal [File.dirname(library)], directories
+      assert_equal [library], files
     end
 
     def test_finds_nothing_where_libraries_cannot_be_listed
       program = file('bin/tool')
 
-      directories = Libraries.stub(:available?, false) do
-        Libraries.stub(:otool, ->(*) { flunk 'otool ran' }) { Libraries.directories([program]) }
+      files = Libraries.stub(:available?, false) do
+        Libraries.stub(:otool, ->(*) { flunk 'otool ran' }) { Libraries.files([program]) }
       end
 
-      assert_empty directories
+      assert_empty files
     end
 
     def test_needs_macos_and_the_command_line_tools

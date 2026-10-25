@@ -428,30 +428,30 @@ module MXC
         File.chmod(0o755, program)
         sandbox = MXC.sandbox.with_env('PATH' => "/nonexistent:#{bin}").with_libraries_of('ext/psych.bundle')
         found = nil
-        directories = lambda do |binaries, executable:|
+        files = lambda do |binaries, executable:|
           found = [binaries, executable]
-          ['/opt/homebrew/Cellar/libyaml/0.2.5/lib']
+          ['/opt/homebrew/Cellar/libyaml/0.2.5/lib/libyaml-0.2.dylib']
         end
 
         _, request = Libraries.stub(:available?, true) do
-          Libraries.stub(:directories, directories) { capture_request(sandbox, 'ruby', '-e', 'exit') }
+          Libraries.stub(:files, files) { capture_request(sandbox, 'ruby', '-e', 'exit') }
         end
 
         assert_equal [[program, File.expand_path('ext/psych.bundle')], program], found
-        assert_equal ['/opt/homebrew/Cellar/libyaml/0.2.5/lib'], request[:readonly]
+        assert_equal ['/opt/homebrew/Cellar/libyaml/0.2.5/lib/libyaml-0.2.dylib'], request[:readonly]
       end
     end
 
     def test_the_program_of_a_shell_command_is_its_first_word
       found = []
-      directories = lambda do |binaries, executable:|
+      files = lambda do |binaries, executable:|
         found << [binaries, executable]
         []
       end
       sandbox = MXC.sandbox.with_directory('/opt/app')
 
       Libraries.stub(:available?, true) do
-        Libraries.stub(:directories, directories) do
+        Libraries.stub(:files, files) do
           capture_request(sandbox, './bin/build --fast && ls')
           capture_request(sandbox, 'missing-program')
           capture_request(sandbox, 'echo "unterminated')
@@ -465,10 +465,37 @@ module MXC
       sandbox = MXC.sandbox.with_readable('app').with_libraries_of('ext/psych.bundle')
 
       _, request = Libraries.stub(:available?, false) do
-        Libraries.stub(:directories, ->(*) { flunk 'libraries listed' }) { capture_request(sandbox, 'ruby') }
+        Libraries.stub(:files, ->(*) { flunk 'libraries listed' }) { capture_request(sandbox, 'ruby') }
       end
 
       assert_equal [File.expand_path('app')], request[:readonly]
+    end
+
+    def test_libraries_can_be_turned_off_by_setter_macro_and_option
+      assert MXC.sandbox.libraries
+      refute MXC.sandbox.with_libraries(false).libraries
+      assert MXC.sandbox.with_libraries(false).with_libraries(nil).libraries
+      refute Class.new(MXC::Sandbox) { libraries false }.new.libraries
+      refute Sandbox.new(libraries: false).libraries
+      assert_raises(ArgumentError) { MXC.sandbox.with_libraries(:yes) }
+    end
+
+    def test_requests_grant_no_library_when_turned_off
+      sandbox = MXC.sandbox.with_readable('app').with_libraries_of('ext/psych.bundle').with_libraries(false)
+
+      _, request = Libraries.stub(:available?, true) do
+        Libraries.stub(:files, ->(*) { flunk 'libraries listed' }) { capture_request(sandbox, 'ruby') }
+      end
+
+      assert_equal [File.expand_path('app')], request[:readonly]
+    end
+
+    def test_inspect_shows_the_library_settings
+      inspect = MXC.sandbox.with_libraries_of('ext/psych.bundle').inspect
+
+      assert_match(%r{ libraries_of=\["ext/psych.bundle"\]>\z}, inspect)
+      assert_match(/ libraries=false>\z/, MXC.sandbox.with_libraries(false).inspect)
+      refute_match(/libraries/, MXC.sandbox.inspect)
     end
 
     def test_macros_return_nil

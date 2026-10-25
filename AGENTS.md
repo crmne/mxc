@@ -39,7 +39,7 @@ Keep 0.x minimal: no PTY, no long-lived container lifecycle, no UI policy until 
 
 ## Security rules
 
-- Never widen a sandbox implicitly. A new default must be at least as strict as the old one.
+- Never widen a sandbox implicitly, except to read the libraries the command's own program loads, and those of the binaries `with_libraries_of` names: grant those library files, never their directories, and keep `with_libraries(false)` turning it off. Any other new default must be at least as strict as the old one.
 - The allow-list proxy refuses names that resolve only to private addresses unless the IP literal is listed. Keep that property and its tests.
 - Sandboxes without network access must not see host resolver sockets (`Sandbox::HOST_RESOLVER_SOCKETS`). Do not remove that list without a replacement.
 - Report security problems in MXC itself to Microsoft privately, not in issues or docs of this repository.

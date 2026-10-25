@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'shellwords'
 
 module MXC
-  # Finds the shared libraries programs load, directly or through other
-  # libraries, so a sandbox can read them. Only macOS needs this: Seatbelt
+  # Finds the shared library files programs load, directly or through
+  # other libraries, so a sandbox can read them and nothing beside them. Only macOS needs this: Seatbelt
   # sandboxes read the system's libraries but not those a package manager
   # installs, such as Homebrew's, which a program like Ruby may link. The
   # libraries come from the programs' load commands, read with otool from
@@ -20,14 +21,26 @@ module MXC
     @lock = Mutex.new
 
     class << self
-      # Returns the real directories of the libraries +binaries+ load
-      # outside the system's own, empty where none are needed or otool is
-      # missing. +executable+ is the program that loads them, for
-      # libraries named relative to it.
-      def directories(binaries, executable: nil)
+      # Returns the real paths of the library files +binaries+ load outside
+      # the system's own, empty where none are needed or otool is missing.
+      # +executable+ is the program that loads them, for libraries named
+      # relative to it.
+      def files(binaries, executable: nil)
         return [] if binaries.empty? || !available?
 
-        libraries(binaries, executable).map { |library| File.dirname(library) }.uniq
+        libraries(binaries, executable)
+      end
+
+      # Returns the path of the program +arguments+ start: the first argument, or the first
+      # word of a command for the shell, found on +path+ or under +directory+. Returns nil
+      # when there is none.
+      def program(arguments, path:, directory:)
+        name = program_name(arguments)
+        return if name.nil?
+        return File.expand_path(name, directory || '/') if name.include?('/')
+
+        path.to_s.split(File::PATH_SEPARATOR).map { |entry| File.join(entry, name) }
+            .find { |candidate| File.file?(candidate) && File.executable?(candidate) }
       end
 
       # Returns true when this host can list a program's libraries.
@@ -38,6 +51,12 @@ module MXC
       end
 
       private
+
+      def program_name(arguments)
+        arguments.one? ? Shellwords.split(arguments.first).first : arguments.first
+      rescue ArgumentError
+        nil
+      end
 
       def libraries(binaries, executable)
         roots = binaries.filter_map { |binary| real_path(binary) }

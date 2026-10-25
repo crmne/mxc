@@ -39,6 +39,17 @@ module MXC
       assert_equal 0, result.exit_code, result.stderr
     end
 
+    def test_only_the_library_files_become_readable
+      program = compile(PROGRAM, 'app/answer', '-L', File.dirname(@library), '-lanswer')
+      neighbour = File.join(File.dirname(@library), 'notes.txt')
+      File.write(neighbour, 'private')
+      sandbox = MXC.sandbox.with_libraries_of(program)
+
+      assert_equal 0, sandbox.run('/bin/cat', @library).exit_code
+      refute_equal 0, sandbox.run('/bin/cat', neighbour).exit_code
+      refute_equal 0, sandbox.run('/bin/ls', File.dirname(@library)).exit_code
+    end
+
     def test_a_program_opens_a_bundle_whose_libraries_it_was_given
       loader = compile(LOADER, 'app/loader')
       bundle = compile(BUNDLE, 'app/ext/check.bundle', '-bundle', '-L', File.dirname(@library), '-lanswer')
