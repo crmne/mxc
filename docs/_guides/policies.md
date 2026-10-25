@@ -47,6 +47,23 @@ Relative paths are expanded from the current directory when the command runs. `w
 
 Anything else the command writes is either refused or thrown away when the sandbox exits.
 
+### Shared libraries on macOS
+
+A program built against libraries outside the system, such as a Ruby that links Homebrew's GMP, would not start in a sandbox that cannot read them. On macOS, the sandbox reads the directories of the libraries the command's program links, and of the libraries those link in turn. Only those directories become readable, never the whole Homebrew prefix. The program is the first argument, or the first word of a command for the shell, found on the `PATH` you set with `env`.
+
+A program can also open libraries while it runs, like the extensions Ruby and Python load on `require` and `import`. Name them with `libraries_of`, and the sandbox reads the libraries they link:
+
+```ruby
+extensions = Dir[File.join(RbConfig::CONFIG["archdir"], "**", "*.bundle")]
+
+MXC.sandbox
+  .with_readable(RbConfig::CONFIG["prefix"])
+  .with_libraries_of(*extensions)
+  .run(RbConfig.ruby, "-ryaml", "-e", "puts YAML.dump(ok: true)")
+```
+
+MXC lists the libraries with `otool` from the Command Line Tools. On a Mac without them, and on Linux and Windows, where the sandbox already reads the system's libraries, neither grants anything.
+
 ## Network
 
 A sandbox has no network unless you give it one. It gets its own empty network namespace, so connections, DNS lookups, and local sockets on your machine are all out of reach.

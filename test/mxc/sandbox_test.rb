@@ -413,6 +413,64 @@ module MXC
       assert_equal 5, SkillSandbox.new(timeout: 5).timeout
     end
 
+    def test_libraries_of_accumulates_resets_and_comes_from_macros_and_options
+      sandbox = Class.new(MXC::Sandbox) { libraries_of 'ext/psych.bundle' }.new(libraries_of: Pathname('libruby.dylib'))
+
+      assert_equal %w[ext/psych.bundle libruby.dylib], sandbox.libraries_of
+      assert_equal %w[ext/psych.bundle libruby.dylib a], sandbox.with_libraries_of('a').libraries_of
+      assert_empty sandbox.with_libraries_of(nil).libraries_of
+    end
+
+    def test_requests_read_the_libraries_of_the_program_and_of_libraries_of
+      Dir.mktmpdir do |bin|
+        program = File.join(bin, 'ruby')
+        File.write(program, '')
+        File.chmod(0o755, program)
+        sandbox = MXC.sandbox.with_env('PATH' => "/nonexistent:#{bin}").with_libraries_of('ext/psych.bundle')
+        found = nil
+        directories = lambda do |binaries, executable:|
+          found = [binaries, executable]
+          ['/opt/homebrew/Cellar/libyaml/0.2.5/lib']
+        end
+
+        _, request = Libraries.stub(:available?, true) do
+          Libraries.stub(:directories, directories) { capture_request(sandbox, 'ruby', '-e', 'exit') }
+        end
+
+        assert_equal [[program, File.expand_path('ext/psych.bundle')], program], found
+        assert_equal ['/opt/homebrew/Cellar/libyaml/0.2.5/lib'], request[:readonly]
+      end
+    end
+
+    def test_the_program_of_a_shell_command_is_its_first_word
+      found = []
+      directories = lambda do |binaries, executable:|
+        found << [binaries, executable]
+        []
+      end
+      sandbox = MXC.sandbox.with_directory('/opt/app')
+
+      Libraries.stub(:available?, true) do
+        Libraries.stub(:directories, directories) do
+          capture_request(sandbox, './bin/build --fast && ls')
+          capture_request(sandbox, 'missing-program')
+          capture_request(sandbox, 'echo "unterminated')
+        end
+      end
+
+      assert_equal [[['/opt/app/bin/build'], '/opt/app/bin/build'], [[], nil], [[], nil]], found
+    end
+
+    def test_requests_skip_libraries_where_they_cannot_be_listed
+      sandbox = MXC.sandbox.with_readable('app').with_libraries_of('ext/psych.bundle')
+
+      _, request = Libraries.stub(:available?, false) do
+        Libraries.stub(:directories, ->(*) { flunk 'libraries listed' }) { capture_request(sandbox, 'ruby') }
+      end
+
+      assert_equal [File.expand_path('app')], request[:readonly]
+    end
+
     def test_macros_return_nil
       assert_nil Class.new(MXC::Sandbox).readable('a')
     end

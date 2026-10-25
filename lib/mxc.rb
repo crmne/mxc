@@ -12,6 +12,8 @@ require 'mxc/backend'
 require 'mxc/availability'
 require 'mxc/process'
 require 'mxc/windows_arguments'
+require 'mxc/load_commands'
+require 'mxc/libraries'
 require 'mxc/sandbox'
 
 # Runs commands in sandboxes through Microsoft's MXC.
