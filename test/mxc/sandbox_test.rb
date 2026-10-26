@@ -422,6 +422,7 @@ module MXC
     end
 
     def test_requests_read_the_libraries_of_the_program_and_of_libraries_of
+      skip_on_windows
       Dir.mktmpdir do |bin|
         program = File.join(bin, 'ruby')
         File.write(program, '')
@@ -443,6 +444,7 @@ module MXC
     end
 
     def test_the_program_of_a_shell_command_is_its_first_word
+      skip_on_windows
       found = []
       files = lambda do |binaries, executable:|
         found << [binaries, executable]
@@ -468,7 +470,7 @@ module MXC
         Libraries.stub(:files, ->(*) { flunk 'libraries listed' }) { capture_request(sandbox, 'ruby') }
       end
 
-      assert_equal [File.expand_path('app')], request[:readonly]
+      assert_equal [native(File.expand_path('app'))], request[:readonly]
     end
 
     def test_libraries_can_be_turned_off_by_setter_macro_and_option
@@ -487,7 +489,7 @@ module MXC
         Libraries.stub(:files, ->(*) { flunk 'libraries listed' }) { capture_request(sandbox, 'ruby') }
       end
 
-      assert_equal [File.expand_path('app')], request[:readonly]
+      assert_equal [native(File.expand_path('app'))], request[:readonly]
     end
 
     def test_inspect_shows_the_library_settings

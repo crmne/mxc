@@ -23,6 +23,14 @@ module SandboxHelpers
     skip problem.message if problem
   end
 
+  def skip_on_windows
+    skip 'MXC looks up a program and its libraries only on macOS' if Gem.win_platform?
+  end
+
+  def native(path)
+    Gem.win_platform? ? path.tr('/', '\\') : path
+  end
+
   def outcome(**overrides)
     OUTCOME.merge(overrides)
   end
