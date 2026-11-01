@@ -43,6 +43,8 @@ sandbox = MXC.sandbox
 * `writable` paths can be read and changed, and the changes reach your machine.
 * `denied` paths are hidden, even when they sit inside a readable or writable path.
 
+A path that is both readable and writable is writable, whichever you added first, so a subclass can make a parent's readable path writable. A readable path inside a writable one stays read-only, except on Landlock, which refuses it. The two must name the same path once expanded: `/tmp/x` and `/private/tmp/x` on macOS, or a path and a symlink to it, are different paths here, and MXC keeps them read-only.
+
 Relative paths are expanded from the current directory when the command runs. `with_readable(nil)` clears the list.
 
 Anything else the command writes is either refused or thrown away when the sandbox exits.

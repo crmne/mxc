@@ -126,6 +126,38 @@ module MXC
       assert_nil request[:allow]
     end
 
+    def test_requests_list_a_path_that_is_readable_and_writable_only_as_writable
+      sandbox = MXC.sandbox.with_readable('both', 'app').with_writable('both')
+      _, request = Preflight.stub(:windows?, false) { capture_request(sandbox) }
+
+      assert_equal [File.expand_path('app')], request[:readonly]
+      assert_equal [File.expand_path('both')], request[:readwrite]
+      assert_equal %w[both app], sandbox.readable
+    end
+
+    def test_requests_match_paths_after_expanding_them
+      sandbox = MXC.sandbox.with_readable('tmp/../both/').with_writable(Pathname('both'))
+      _, request = Preflight.stub(:windows?, false) { capture_request(sandbox) }
+
+      assert_empty request[:readonly]
+      assert_equal [File.expand_path('both')], request[:readwrite]
+    end
+
+    def test_requests_keep_a_readable_path_inside_a_writable_one
+      sandbox = MXC.sandbox.with_writable('tmp').with_readable('tmp/config')
+      _, request = Preflight.stub(:windows?, false) { capture_request(sandbox) }
+
+      assert_equal [File.expand_path('tmp/config')], request[:readonly]
+      assert_equal [File.expand_path('tmp')], request[:readwrite]
+    end
+
+    def test_requests_keep_a_denied_path_that_is_also_readable_and_writable
+      sandbox = MXC.sandbox.with_readable('both').with_writable('both').with_denied('both')
+      _, request = Preflight.stub(:windows?, false) { capture_request(sandbox) }
+
+      assert_includes request[:denied], File.expand_path('both')
+    end
+
     def test_requests_carry_the_network_policy
       _, open = capture_request(MXC.sandbox.with_network(true))
       _, listed = capture_request(MXC.sandbox.with_network(allow: ['pypi.org']))

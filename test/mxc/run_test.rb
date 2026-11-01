@@ -46,6 +46,61 @@ module MXC
       refute_path_exists File.join(@readable, 'hack')
     end
 
+    def test_a_path_that_is_readable_and_writable_can_be_written
+      [
+        MXC.sandbox.with_readable(@writable).with_writable(@writable),
+        MXC.sandbox.with_writable(@writable).with_readable(@writable)
+      ].each_with_index do |sandbox, index|
+        file = File.join(@writable, "#{index}.txt")
+        result = sandbox.run("echo hi > #{file} && cat #{file}")
+
+        assert_equal "hi\n", result.stdout, result.stderr
+      end
+    end
+
+    def test_a_subclass_can_make_a_readable_path_of_its_parent_writable
+      parent = Class.new(Sandbox).tap { |sandbox| sandbox.readable @writable }
+      child = Class.new(parent).tap { |sandbox| sandbox.writable @writable }
+
+      assert_predicate child.new.run("echo hi > #{@writable}/output.txt"), :success?
+      assert_equal "hi\n", File.read(File.join(@writable, 'output.txt'))
+    end
+
+    def test_a_path_being_both_grants_nothing_beyond_it
+      MXC.run("echo x > #{@readable}/hack; echo x > #{@writable}/output.txt",
+              readable: [@readable, @writable], writable: @writable)
+
+      assert_path_exists File.join(@writable, 'output.txt')
+      refute_path_exists File.join(@readable, 'hack')
+    end
+
+    def test_a_readable_path_inside_a_writable_one_stays_read_only
+      skip 'Landlock refuses readable paths inside writable ones' if MXC.availability.runs_on == :landlock
+      result = MXC.run("echo x > #{@writable}/output.txt; echo x > #{@readable}/hack",
+                       writable: @dir, readable: @readable)
+
+      assert_path_exists File.join(@writable, 'output.txt')
+      refute_path_exists File.join(@readable, 'hack')
+      refute_predicate result, :success?
+    end
+
+    def test_denied_paths_stay_hidden_when_also_readable_and_writable
+      File.write(File.join(@writable, 'secret'), 'hidden')
+      result = MXC.run("cat #{@writable}/secret; echo x > #{@writable}/hack",
+                       readable: @writable, writable: @writable, denied: @writable)
+
+      assert_empty result.stdout
+      refute_path_exists File.join(@writable, 'hack')
+    end
+
+    def test_another_spelling_of_a_readable_path_stays_read_only
+      spelled = File.realpath(@readable)
+      skip 'the temporary directory has one spelling here' if spelled == @readable
+      MXC.run("echo x > #{spelled}/hack", readable: @readable, writable: spelled)
+
+      refute_path_exists File.join(@readable, 'hack')
+    end
+
     def test_cannot_see_paths_it_was_not_given
       result = MXC.run("ls #{@dir}")
 

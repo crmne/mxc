@@ -177,7 +177,8 @@ module MXC
       add_paths(:readable, paths)
     end
 
-    # Adds paths the command can read and write.
+    # Adds paths the command can read and write. A path that is also #readable is writable,
+    # whichever was added first. A readable path inside a writable one stays read-only.
     def with_writable(*paths)
       add_paths(:writable, paths)
     end
@@ -470,9 +471,11 @@ module MXC
 
     def request(arguments)
       Preflight.check!(network:, denied:, resources:, backend:)
+      readwrite = expand(writable)
       {
-        readonly: expand(readable) | library_files(arguments),
-        readwrite: expand(writable),
+        # MXC resolves a path in both lists to read-only.
+        readonly: (expand(readable) | library_files(arguments)) - readwrite,
+        readwrite:,
         denied: expand(denied) | hidden_resolver_sockets,
         environment:,
         working_directory:,
