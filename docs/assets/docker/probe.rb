@@ -68,6 +68,10 @@ check("inner processes visible") { sandboxed("ls /proc | grep -c '^[0-9]'") }
 check("inner sees worker cmdline") do
   sandboxed("cat /proc/[0-9]*/cmdline 2>/dev/null | tr '\\0' ' ' | grep -c '[d]ocker/probe'")
 end
+check("inner reads the worker's environment") do
+  ENV["MXC_PROBE_CANARY"] = "mxc-canary-not-a-real-secret"
+  sandboxed("cat /proc/[0-9]*/environ 2>/dev/null | tr '\\0' '\\n' | grep -c '[m]xc-canary'")
+end
 check("inner getpid matches /proc/self") do
   sandboxed("python3 -c \"import os; print(os.getpid() == int(os.readlink('/proc/self')))\"")
 end

@@ -605,7 +605,7 @@ dependencies = [
 [[package]]
 name = "mxc-sdk"
 version = "1.0.0"
-source = "git+https://github.com/crmne/microsoft-mxc?rev=d57b0d1aa3a2d552001fa54ef4ac4baaa733c26d#d57b0d1aa3a2d552001fa54ef4ac4baaa733c26d"
+source = "git+https://github.com/crmne/microsoft-mxc?rev=d7ba62b299fbcd7bdd4d7876cefcd68ada9a469b#d7ba62b299fbcd7bdd4d7876cefcd68ada9a469b"
 dependencies = [
  "anyhow",
  "base64",
