@@ -101,11 +101,16 @@ Bubblewrap can bind the container's `/proc` instead of mounting a new one (`--ro
 
 The cost:
 
-* The sandbox lists the container's processes and can read their command lines (14 processes in our test, including the worker). It cannot read their environments (`/proc/<pid>/environ`: `Permission denied`) and cannot signal them, because they are outside its pid namespace.
+* The sandbox lists the container's processes and can read their command lines (14 processes in our test, including the worker). That includes other sandboxes running at the same time: the script each was given and the names of the files passed to it. A fresh `/proc` (option A) is the only way to hide them. `hidepid` does not help, because it cannot be set on a bind and does not hide a user's own processes.
+* It cannot read those processes' environments (`/proc/<pid>/environ`: `Permission denied`), because reading them takes a capability in their user namespace, and the sandbox has its own user namespace and no capabilities. It cannot signal them, because they are outside its pid namespace.
 * `/proc/self` points at the container-level pid, so it no longer matches `getpid()`. Programs that build `/proc/<getpid()>/...` paths read the wrong process. Python `subprocess` and `multiprocessing` worked.
 * Dropping `--unshare-pid` as well makes the pid view consistent but lets sandboxed code `kill` the worker. We measured that, and do not recommend it.
 
 MXC 1.0 cannot do this by itself. It runs `bwrap` through a `PATH` lookup (`Command::new("bwrap")` in `bwrap_runner.rs`), so a wrapper at `/usr/local/bin/bwrap` can rewrite MXC's `--proc /proc` before calling `/usr/bin/bwrap`. [`bwrap-wrapper.sh`]({{ '/assets/docker/bwrap-wrapper.sh' | relative_url }}) does this when `MXC_BWRAP_PROC=bind`. It depends on MXC 1.0's argument layout, so treat it as a workaround to retest on every MXC upgrade, not a stable interface.
+
+The wrapper also hands Bubblewrap its options through a descriptor, in every mode. Other sandboxes then cannot read the policy's paths or the variables you set with `env` in Bubblewrap's command line. Copy the current wrapper when you upgrade the gem. An older copy still works, but keeps them visible.
+
+MXC starts Bubblewrap with only `PATH`, `MXC_BWRAP_PROC`, `MXC_REAL_BWRAP`, and `MXC_USERNS_FILTER` from your environment, so a wrapper that needs anything else has to set it itself.
 
 ## Stopping nested user namespaces
 

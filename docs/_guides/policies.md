@@ -147,6 +147,27 @@ sandbox.with_env("LANG" => "C.UTF-8", "PYTHONDONTWRITEBYTECODE" => "1")
 Never pass secrets the command does not need. Anything in its environment, it can read and send wherever its network policy allows.
 {: .warning }
 
+## What the command can see of other processes
+
+The filesystem policy decides which files the command reads. What it can learn about other processes depends on the backend, because `/proc`, and on macOS the kernel's process information, are not ordinary files:
+
+| Backend | Lists other processes | Reads their command lines | Reads their environments |
+| --- | --- | --- | --- |
+| Bubblewrap | Only its own sandbox's | Its own sandbox's | Its own sandbox's |
+| Bubblewrap with a [bound `/proc`]({% link _guides/running-in-docker.md %}#option-b-keep-dockers-masks-and-bind-proc) | Yes, the whole container's | Yes, including other sandboxes' | Its own sandbox's |
+| Landlock | Yes, the whole machine's or container's | Yes, including other sandboxes' | Its own sandbox's |
+| Seatbelt | Partly | Yes, for your user's processes | Yes, for your user's processes, as they started |
+
+"Its own sandbox's" includes Bubblewrap's own process, which stays in the sandbox and starts with only `PATH` and the settings of the [Docker wrapper]({% link _guides/running-in-docker.md %}#handling-the-masked-proc) from your environment. Its command line shows the policy's paths and the variables you set with `env`.
+
+So plan for these limits:
+
+* **Keep secrets off command lines.** On Landlock, Seatbelt, and a bound `/proc`, one sandbox can read the command lines of your application and of other sandboxes running at the same time, including the script a run was given and the names of the files it was passed.
+* **On macOS, start your application with only the secrets it must have at launch.** Seatbelt rules cannot block this query: a sandboxed command can read the environment your process was started with, though not variables you set later from Ruby. Apple's own system programs are exempt.
+* **Runs do not see each other's environments** on Linux. The kernel refuses them, because each sandbox has its own Landlock domain or user namespace.
+
+We have not measured this on Windows.
+
 ## Working directory
 
 `directory` sets where the command starts. The sandbox must be able to see it, so make it readable or writable too:

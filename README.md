@@ -128,6 +128,8 @@ MXC.backends                   # => [#<MXC::Backend name=:bubblewrap ...>]
 
 On Windows, a single String runs through `cmd.exe` instead of `sh`. See [Running Commands](https://crmne.github.io/mxc/running-commands/#windows) and [Policies](https://crmne.github.io/mxc/policies/#windows) for what else differs.
 
+A sandbox controls files, network, and resources. It does not always hide other processes: on some backends a command can read their command lines, and on macOS the environment your application started with. [Policies](https://crmne.github.io/mxc/policies/#what-the-command-can-see-of-other-processes) lists what each backend shows.
+
 Docker blocks the namespaces Bubblewrap needs by default, so a default container runs sandboxes on Landlock. [Running in Docker](https://crmne.github.io/mxc/running-in-docker/) shows what that gives up, and the smallest set of changes that makes Bubblewrap work, with a seccomp profile and a Kamal configuration for a job role.
 
 ## Documentation

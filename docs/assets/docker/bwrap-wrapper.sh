@@ -13,6 +13,11 @@
 #    sandbox sees the container's process list (not their environments) and
 #    /proc/self no longer matches getpid(). MXC emits `--proc /proc` before
 #    any caller-supplied argument, so the first exact pair is MXC's own.
+# 3. Hands bwrap its options through a descriptor, so they are not in its
+#    command line, which other processes can read. Those options include the
+#    variables set with `env` and the policy's paths. bwrap only takes options
+#    that way, so the command after `--` stays on its command line, as it does
+#    on the command's own.
 set -euo pipefail
 REAL_BWRAP="${MXC_REAL_BWRAP:-/usr/bin/bwrap}"
 USERNS_FILTER="${MXC_USERNS_FILTER:-/usr/local/lib/mxc/deny-userns.bpf}"
@@ -38,6 +43,10 @@ fi
 
 if [ -n "$sandbox" ]; then
   exec {filter_fd}<"$USERNS_FILTER"
-  exec "$REAL_BWRAP" --add-seccomp-fd "$filter_fd" "${args[@]}"
+  for ((i = 0; i < ${#args[@]}; i++)); do
+    [ "${args[i]}" = -- ] && break
+  done
+  exec {options_fd}< <(printf '%s\0' "${args[@]:0:i}")
+  exec "$REAL_BWRAP" --add-seccomp-fd "$filter_fd" --args "$options_fd" "${args[@]:i}"
 fi
 exec "$REAL_BWRAP" "${args[@]}"
