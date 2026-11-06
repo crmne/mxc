@@ -81,14 +81,14 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - { platform: x86_64-linux, runner: ubuntu-latest }
-          - { platform: x86_64-linux-musl, runner: ubuntu-latest }
-          - { platform: aarch64-linux, runner: ubuntu-latest }
-          - { platform: aarch64-linux-musl, runner: ubuntu-latest }
-          - { platform: x86_64-darwin, runner: ubuntu-latest }
-          - { platform: arm64-darwin, runner: ubuntu-latest }
-          - { platform: x64-mingw-ucrt, runner: ubuntu-latest }
-          - { platform: aarch64-mingw-ucrt, runner: ubuntu-latest }
+          - { platform: x86_64-linux, runner: ubuntu-24.04 }
+          - { platform: x86_64-linux-musl, runner: ubuntu-24.04 }
+          - { platform: aarch64-linux, runner: ubuntu-24.04 }
+          - { platform: aarch64-linux-musl, runner: ubuntu-24.04 }
+          - { platform: x86_64-darwin, runner: ubuntu-24.04 }
+          - { platform: arm64-darwin, runner: ubuntu-24.04 }
+          - { platform: x64-mingw-ucrt, runner: ubuntu-24.04 }
+          - { platform: aarch64-mingw-ucrt, runner: ubuntu-24.04 }
     steps:
       - uses: actions/checkout@v7
         with:

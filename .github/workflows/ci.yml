@@ -41,7 +41,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        # Ruby 3.2's headers fail rb-sys's binding generation on ubuntu-26.04.
+        os: [ubuntu-24.04]
         ruby: ["3.2", "3.3", "3.4", "4.0"]
         include:
           - os: macos-latest
