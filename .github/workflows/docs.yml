@@ -32,7 +32,7 @@ jobs:
           bundler-cache: true
           working-directory: docs
       - id: pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
       - name: Build
         working-directory: docs
         env:
