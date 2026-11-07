@@ -164,7 +164,7 @@ PLATFORMS
 
 DEPENDENCIES
   jekyll (~> 4.4)
-  jekyll-vitepress-theme (~> 1.9)
+  jekyll-vitepress-theme
   webrick
 
 CHECKSUMS
