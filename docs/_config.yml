@@ -36,6 +36,12 @@ exclude:
 jekyll_vitepress:
   version:
     file: ../lib/mxc/version.rb
+  # `bundle exec jekyll-vitepress build` publishes the latest release at /
+  # and main at /next/, each with its own API reference.
+  versions:
+    next: true
+  build:
+    after_build: bin/build-api.sh "$VITEPRESS_VERSION_OUTPUT/api" "$VITEPRESS_VERSION_ROOT"
   seo:
     page_type: TechArticle
     publisher:

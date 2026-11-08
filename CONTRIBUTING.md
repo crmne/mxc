@@ -37,3 +37,5 @@ Preview the docs with:
 ```sh
 cd docs && bundle install && bundle exec jekyll serve
 ```
+
+To preview the published site, with the latest release at `/`, `main` at `/next/`, and the API reference in each, run `bundle install` at the repository root too, then `bundle exec jekyll-vitepress serve` in `docs`.
