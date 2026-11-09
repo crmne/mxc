@@ -3,7 +3,7 @@
 # release target. Upgrading is deliberate: bump the version here and in
 # mise.toml, fix what the new lints find, one commit.
 [toolchain]
-channel = "1.99.0"
+channel = "1.99.1"
 components = ["rustfmt", "clippy"]
 targets = [
   "x86_64-unknown-linux-gnu",
